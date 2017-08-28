@@ -1,0 +1,22 @@
+Hello, @name! Are you @age?
+
+#if @age >= 24:
+	Hi, man!
+	#if @age > 60:
+		You are an old man, aren't you?
+	#end
+#else:
+	#if @age < 10:
+		WHOA, BABY?!
+	#else:
+		Hello, boy!
+	#end
+#end
+
+#for @i in @a.b:
+	This is @i.
+	#for @s in @a.b.c:
+		[S ... @s]
+	#end
+#end
+

@@ -1,0 +1,39 @@
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>TEST</title>
+	<style>
+	red{color:red}
+	ol{background-color:#9cf;color:#711;font-size:large;}
+	</style>
+</head>
+<body>
+	<h1>hello, @name! Are you <red>@age</red>?</h1>
+#if @age >= 24:
+	<h2>Hi, man!</h2>
+	#if @age > 60:
+		<h3>You are an old man, aren't you?</h3>
+	#end
+#else:
+	#if @age < 10:
+		<h2>Heyhey, What a clever baby?!</h2>
+	#else:
+		<h2>Hello, boy!</h2>
+	#end
+#end
+
+<p>
+<ol>
+#for @i in @a:
+	<li>This is @i.</li>
+	<ol>
+	#for @s in @a.b:
+		<li>[S ... @s]</li>
+	#end
+	</ol>
+#end
+</ol>
+</p>
+
+</body>
+</html>

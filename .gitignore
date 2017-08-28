@@ -1,0 +1,56 @@
+# target
+holyhttp
+test
+
+[source insight]
+*.IAB
+*.IAD
+*.IMB
+*.IMD
+*.PFI
+*.PO
+*.PR
+*.PRI
+*.PS
+*.WK3
+*.SearchResults
+
+[core dump]
+core.*
+
+
+*.log
+*.pot
+local_settings.py
+*/~$.doc*
+.build
+.tmp
+*.rpm
+*.out
+*.upd
+tmp
+
+*_custom_*.*
+
+#svn
+*.svn/
+*.svn*
+
+# python
+*.py[cod]
+
+# pycharm
+*.idea/
+
+# C extensions
+*.so
+*.o
+*.i
+*.a
+
+# project
+dist
+build
+bin
+lib
+lib64
