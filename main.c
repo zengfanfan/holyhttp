@@ -37,14 +37,14 @@ int main(int argc, char *argv[])
 {
     set_fd_limit();
 
-    if (!server_init(&server)) {
-        FATAL("Failed to init server.");
+    if (!server_init(&holyserver)) {
+        FATAL("Failed to init holyserver.");
         return -1;
     }
 
     init_cgi();
 
-    server.run(&server);
+    holyserver.run(&holyserver);
     
     return 0;
 }

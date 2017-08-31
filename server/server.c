@@ -1,10 +1,8 @@
 #include <unistd.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <errno.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
-#include <netinet/tcp.h>
 #include <config.h>
 #include <utils/print.h>
 #include <utils/address.h>
@@ -20,7 +18,7 @@
 
 typedef status_code_t (*route_handler_t)(request_t *req);
 
-server_t server;
+server_t holyserver;
 
 static int server_listen(server_t *self)
 {

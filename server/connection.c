@@ -4,7 +4,6 @@
 #include <utils/print.h>
 #include <utils/address.h>
 #include "connection.h"
-#include "packet.h"
 
 #define BUF_DEF_LEN 1024
 
@@ -68,12 +67,11 @@ static void check_timeout(void *args)
 
 static int do_recv(connection_t *self, void *buf, u32 len)
 {
-    int received = recv(self->fd, buf, len, 0);
+    int received = (int)recv(self->fd, buf, len, 0);
     if (received < 0) {
         switch (errno) {
         case EWOULDBLOCK:// not ready
-            // do it next time
-            break;
+            break;// do it next time
         case ECONNRESET:
         case EPIPE:// peer is broken
             close_conn(self);

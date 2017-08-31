@@ -30,7 +30,7 @@ typedef struct server_s {
     char start_time[GMT_TIME_STR_LEN + 1];
 } server_t;
 
-extern server_t server;
+extern server_t holyserver;
 
 int epoll_add_fd(int epfd, int fd, int read);
 int epoll_mdf_fd(int epfd, int fd, int read);

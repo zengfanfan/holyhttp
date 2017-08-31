@@ -1,7 +1,7 @@
 #include "print.h"
 #include "string.h"
 
-u32 inline bkdr_hash_bin(void *bin, u32 len)
+u32 bkdr_hash_bin(void *bin, u32 len)
 {
     u32 hash = 0;
     char *cbin = (char *)bin;
@@ -17,7 +17,7 @@ u32 inline bkdr_hash_bin(void *bin, u32 len)
     return hash;
 }
 
-u32 inline bkdr_hash(char *str)
+u32 bkdr_hash(char *str)
 {
     u32 hash = 0;
     

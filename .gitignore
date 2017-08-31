@@ -2,6 +2,9 @@
 holyhttp
 test
 
+[cmake]
+cmake-*
+
 [source insight]
 *.IAB
 *.IAD
