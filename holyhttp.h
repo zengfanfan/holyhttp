@@ -2,8 +2,8 @@
 // Created by zengfanfan on 8-31 031.
 //
 
-#ifndef HOLYHTTP_HOLYHTTP_H
-#define HOLYHTTP_HOLYHTTP_H
+#ifndef HOLYHTTP_H
+#define HOLYHTTP_H
 
 typedef enum {
     HOLY_DBG_FATAL = 1,
@@ -146,4 +146,4 @@ void holyhttp_run();
 int holyhttp_set_route(char *uri, holyreq_handler_t handler);
 void holyhttp_set_debug_level(holy_dbg_lvl_t level);
 
-#endif //HOLYHTTP_HOLYHTTP_H
+#endif //HOLYHTTP_H
