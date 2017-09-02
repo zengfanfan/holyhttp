@@ -74,6 +74,7 @@ int get_file(char *filename, void **data, u32 *len)
     if (cache.get_sb(&cache, filename, &tmp, len)) {
         *data = memdup(tmp, *len);// they're gonna free us outside!
         if (!*data) {
+            MEMFAIL();
             return 0;
         }
         return 1;
@@ -87,7 +88,7 @@ int get_file(char *filename, void **data, u32 *len)
         return 1;
     }
 
-    cache.set_sb(&cache, filename, *data, *len);
+    cache.set_sb(&cache, filename, *data, *len + 1);
 
     return 1;
 }

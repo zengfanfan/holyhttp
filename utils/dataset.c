@@ -4,6 +4,7 @@ static data_subset_t *new_subset(void)
 {
     data_subset_t *set = (data_subset_t *)malloc(sizeof *set);
     if (!set) {
+        MEMFAIL();
         return NULL;
     }
     memset(set, 0, sizeof *set);

@@ -21,7 +21,7 @@ typedef struct {
 #define TLV_INT_TYPE long
 #define TLV_INT_LEN sizeof(TLV_INT_TYPE)
 
-#define TLVSTR(tlv) (char *)((tlv) ? (char *)((tlv)->v) : "")
+#define TLVSTR(tlv) (char *)((tlv) ? (char *)((tlv)->v) : NULL)
 #define TLVINT(tlv) (long)((tlv) ? *(TLV_INT_TYPE *)((tlv)->v) : 0L)
 #define TLVPTR(tlv) (void *)TLVINT(tlv)
 

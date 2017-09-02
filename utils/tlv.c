@@ -26,6 +26,7 @@ tlv_t *new_tlv(tlv_type_t type, u32 len, void *value)
 
     tlv = (tlv_t *)malloc(sizeof *tlv + len);
     if (!tlv) {
+        MEMFAIL();
         return NULL;
     }
 

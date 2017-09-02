@@ -349,6 +349,7 @@ static int parse_if_elem(char *text, u32 len, char **pnext, if_elem_t **pelem)
     dlen = strlen(left)+1 + strlen(right)+1;
     *pelem = self = (if_elem_t *)malloc(sizeof *self + dlen);
     if (!self) {
+        MEMFAIL();
         return 0;
     }
 
@@ -418,6 +419,7 @@ static int parse_for_elem(char *text, u32 len, char **pnext, for_elem_t **pelem)
     dlen = strlen(item)+1 + strlen(list)+1;
     *pelem = self = (for_elem_t *)malloc(sizeof *self + dlen);
     if (!self) {
+        MEMFAIL();
         return 0;
     }
     
@@ -447,6 +449,7 @@ static int parse_normal_elem(char *text, u32 len, char **pnext, normal_elem_t **
     // clone text
     tmp = (char *)malloc(len + 1);
     if (!tmp) {
+        MEMFAIL();
         return 0;
     }
     memcpy(tmp, text, len);
@@ -457,6 +460,7 @@ static int parse_normal_elem(char *text, u32 len, char **pnext, normal_elem_t **
     // new element
     *pelem = self = (normal_elem_t *)malloc(sizeof *self);
     if (!self) {
+        MEMFAIL();
         free(text);
         return 0;
     }
@@ -531,7 +535,7 @@ static template_t *get_template(char *text)
         return t;
     }
 
-    if (!parse_normal_elem(text, strlen(text), &tmp, (normal_elem_t **)&t)) {
+    if (!parse_normal_elem(text, strlen(text) + 1, &tmp, (normal_elem_t **)&t)) {
         return NULL;
     }
 

@@ -17,7 +17,7 @@ subs:
 	done
 
 clean:
-	${RM} ${TARGET} ${OBJS} ${SUBOBJS} *.o *.tmp core.*
+	${RM} ${TARGET} ${OBJS} ${SUBOBJS} *.o *.tmp core.* *.so
 	@for i in ${SUBDIRS}; \
 		do make --no-print-directory -C $$i $@; \
 	done

@@ -1,6 +1,5 @@
 #include <sys/socket.h>
 #include <unistd.h>
-#include <config.h>
 #include <utils/print.h>
 #include <utils/address.h>
 #include "connection.h"
@@ -22,8 +21,7 @@ static int send_status(connection_t *self, status_code_t code)
     if (!self) {
         return 0;
     }
-    PRINT_CYAN("%15s:%-5u << %d %s\n",
-        IPV4_BIN_TO_STR(self->ip), self->port, code, strstatus(code));
+    INFO("%15s:%-5u << %d %s", IPV4_BIN_TO_STR(self->ip), self->port, code, strstatus(code));
     snprintf(buffer, buf_sz, STATUS_FMT, code, strstatus(code), gmtimestr(NOW));
     return self->write(self, buffer, strlen(buffer));
 }
@@ -55,10 +53,11 @@ static void close_conn(connection_t *self)
 static void check_timeout(void *args)
 {
     connection_t *self = (connection_t *)args;
+    u32 timeout = self->server->cfg.socket_timeout;
     long now = get_sys_uptime();
     long interval = self->last_active - now;
-    if (interval < SOCK_TIMEOUT) {
-        self->timer = set_timeout(SOCK_TIMEOUT - interval, check_timeout, self);
+    if (interval < timeout) {
+        self->timer = set_timeout(timeout - interval, check_timeout, self);
         return;
     }
     // timeout
@@ -138,7 +137,7 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     if (tmp) {
         sscanf(header, "%*[^:\r\n]:%*[^0-9]%10u", &clen);
     }
-    if (clen > MAX_CONTENT_LENGTH) {
+    if (clen > self->server->cfg.max_content_len) {
         send_status(self, REQUEST_ENTITY_TOO_LARGE);
         return;
     }
@@ -150,6 +149,7 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     // make buffer
     buf = self->recv_buf = (buffer_t *)malloc(sizeof(buffer_t) + hlen + clen);
     if (!buf) {
+        MEMFAIL();
         send_status(self, INSUFFICIENT_STORAGE);
         return;
     }
@@ -228,6 +228,7 @@ static int write_to_buf(connection_t *self, void *data, u32 len)
 
     buf = (buffer_t *)malloc(sizeof *buf + len);
     if (!buf) {
+        MEMFAIL();
         send_status(self, INSUFFICIENT_STORAGE);
         return 0;
     }
@@ -253,6 +254,7 @@ connection_t *new_connection(server_t *server, int fd, u32 ip, u16 port)
 
     self = (connection_t *)malloc(sizeof *self);
     if (!self) {
+        MEMFAIL();
         return NULL;
     }
 
@@ -262,7 +264,7 @@ connection_t *new_connection(server_t *server, int fd, u32 ip, u16 port)
     self->port = port;
     self->server = server;
     self->last_active = get_sys_uptime();
-    self->timer = set_timeout(SOCK_TIMEOUT, check_timeout, self);
+    self->timer = set_timeout(self->server->cfg.socket_timeout, check_timeout, self);
     INIT_LIST_HEAD(&self->send_buf);
 
     self->recv = recv_from_peer;

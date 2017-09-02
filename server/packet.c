@@ -228,6 +228,7 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
     fields_len = fields_end - fields_start + 4;
     fields = (char *)malloc(fields_len + 1);
     if (!fields) {
+        MEMFAIL();
         *status = INSUFFICIENT_STORAGE;
         return 0;
     }
@@ -249,19 +250,23 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
     
     if (self->method == POST_METHOD) {
         tmp = self->fields->get_ss(self->fields, "content-length");
-        self->content_length = atoi(tmp);
+        if (tmp) {
+            self->content_length = atoi(tmp);
+        }
     }
     
     tmp = self->fields->get_ss(self->fields, "content-type");
-    // type/subtype; parameters
-    snprintf(fmt, sizeof fmt, "%%%d[^/;]/%%%d[^;] %%%d[^\r\n]",
-        MAX_CONTENT_MAJOR_TYPE_LEN,
-        MAX_CONTENT_SUB_TYPE_LEN,
-        MAX_CONTENT_TYPE_PARAM_LEN);
-    sscanf(tmp, fmt,
-        self->content_type.type,
-        self->content_type.subtype,
-        self->content_type.param);
+    if (tmp) {
+        // type/subtype; parameters
+        snprintf(fmt, sizeof fmt, "%%%d[^/;]/%%%d[^;] %%%d[^\r\n]",
+            MAX_CONTENT_MAJOR_TYPE_LEN,
+            MAX_CONTENT_SUB_TYPE_LEN,
+            MAX_CONTENT_TYPE_PARAM_LEN);
+        sscanf(tmp, fmt,
+            self->content_type.type,
+            self->content_type.subtype,
+            self->content_type.param);
+    }
 
     *content = fields_end + 4;
     
@@ -451,6 +456,7 @@ req_pkt_t *new_req_pkt(char *data, u32 len, status_code_t *status)
 
     pkt = (req_pkt_t *)malloc(sizeof tmp + tmp.content_length);
     if (!pkt) {
+        MEMFAIL();
         *status = INSUFFICIENT_STORAGE;
         goto fail;
     }

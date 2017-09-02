@@ -3,6 +3,7 @@
 
 #include <utils/dict.h>
 
+#define SESSION_ID_NAME SERVER_NAME"-sessionid"
 #define SESSION_ID_LEN  24 // pid[0-8.hex] + bkdr(UA+port+ip)[8.hex] + rand()[0-8.hex]
 
 typedef struct session {

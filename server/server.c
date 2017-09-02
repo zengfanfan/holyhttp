@@ -3,12 +3,13 @@
 #include <errno.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
-#include <config.h>
 #include <utils/print.h>
 #include <utils/address.h>
 #include "server.h"
 #include "connection.h"
 #include "request.h"
+
+#define MAX_PATH_LEN    500
 
 #define EPOLL_EVT_SZ    1024
 
@@ -16,7 +17,7 @@
 #define TCP_DEFER_ACCEPT 9
 #endif
 
-typedef status_code_t (*route_handler_t)(request_t *req);
+typedef void (*route_handler_t)(holyreq_t *req);
 
 server_t holyserver;
 
@@ -27,33 +28,32 @@ static int server_listen(server_t *self)
 
     self->fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (self->fd < 0) {
-        FATAL("Failed(%d) to create socket, %s.", errno, strerror(errno));
+        FATAL_NO("create socket");
         return 0;
     }
     setsockopt(self->fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     setsockopt(self->fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
     setsockopt(self->fd, IPPROTO_TCP, TCP_DEFER_ACCEPT,
-        &self->timeout, sizeof(self->timeout));
+        &self->cfg.socket_timeout, sizeof(self->cfg.socket_timeout));
     
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(self->port);
+    addr.sin_port = htons(self->cfg.port);
     if (bind(self->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        FATAL("Failed(%d) to bind %s:%d, %s.",
-            errno, IPV4_BIN_TO_STR(self->ip), self->port, strerror(errno));
+        FATAL_NO("bind %s:%d", IPV4_BIN_TO_STR(self->cfg.ip), self->cfg.port);
         close(self->fd);
         return 0;
     }
 
     if (listen(self->fd, EPOLL_EVT_SZ) < 0) {
-        FATAL("Failed(%d) to listen socket, %s.", errno, strerror(errno));
+        FATAL_NO("listen server socket");
         close(self->fd);
         return 0;
     }
 
     flags = fcntl(self->fd, F_GETFL, 0);
     if (fcntl(self->fd, F_SETFL, flags|O_NONBLOCK) < 0) {
-        ERROR("Failed(%d) to set socket non-blocking, %s.", errno, strerror(errno));
+        ERROR_NO("set server socket non-blocking");
         // fall through
     }
     
@@ -67,7 +67,7 @@ int epoll_add_fd(int epfd, int fd, int read)
     evt.events = EPOLLET|EPOLLRDHUP;
     evt.events |= read ? EPOLLIN : EPOLLOUT;
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &evt) < 0) {
-        ERROR("Failed to set epoll %c%d failed, %s.", read?'r':'w', fd, strerror(errno));
+        ERROR_NO("add epoll %c%d", read?'r':'w', fd);
         return 0;
     } else {
         return 1;
@@ -81,7 +81,7 @@ int epoll_mdf_fd(int epfd, int fd, int read)
     evt.events = EPOLLET|EPOLLRDHUP;
     evt.events |= read ? EPOLLIN : EPOLLOUT;
     if (epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &evt) < 0) {
-        ERROR("Failed to set epoll %c%d failed, %s.", read?'r':'w', fd, strerror(errno));
+        ERROR_NO("set epoll %c%d", read?'r':'w', fd);
         return 0;
     } else {
         return 1;
@@ -95,7 +95,7 @@ int epoll_del_fd(int epfd, int fd, int read)
     evt.events = EPOLLET|EPOLLRDHUP;
     evt.events |= read ? EPOLLIN : EPOLLOUT;
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &evt) < 0) {
-        ERROR("Failed to del epoll %c%d failed, %s.", read?'r':'w', fd, strerror(errno));
+        ERROR_NO("del epoll %c%d", read?'r':'w', fd);
         return 0;
     } else {
         return 1;
@@ -136,46 +136,42 @@ static int accept_connection(server_t *self)
     return 1;
 }
 
-static int handle_static(request_t *req)
+static int handle_static(holyreq_t *req)
 {
     char path[MAX_PATH_LEN];
+    char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
     snprintf(path, sizeof path, "%s/%s",
-        req->server->static_path, req->pkt->uri + strlen(req->server->static_route));
+        static_uri_prefix, req->uri + strlen(static_uri_prefix));
     return req->send_file(req, path);
 }
 
-static int handle_dynamic(request_t *req)
+static int handle_dynamic(holyreq_t *req)
 {
     route_handler_t handler;
-    dict_t *routes = req->server->routes;
-    char path[MAX_PATH_LEN];
-    status_code_t status;
-    char *uri;
-    
-    if (!strcasecmp(req->pkt->uri, "/favicon.ico")) {
-        snprintf(path, sizeof path, "%sfavicon.ico", req->server->static_route);
+    dict_t *routes = ((request_t *)req)->server->routes;
+    char path[MAX_PATH_LEN], *uri;
+    char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
+
+    if (!strcasecmp(req->uri, "/favicon.ico")) {
+        snprintf(path, sizeof path, "%sfavicon.ico", static_uri_prefix);
         return req->redirect_forever(req, path);
     }
     
-    uri = strdup(req->pkt->uri);
+    uri = strdup(req->uri);
     if (!uri) {
         return req->send_status(req, INSUFFICIENT_STORAGE);
     }
 
     str_trim(uri, "/");
-    handler = (route_handler_t)routes->get_sp(routes, uri);
+    handler = routes->get_sp(routes, uri);
     free(uri);
 
     if (!handler) {
         return req->send_status(req, NOT_FOUND);
     }
 
-    status = handler(req);
-    if (status == OK) {
-        return 1;
-    } else {
-        return req->send_status(req, status);
-    }
+    handler(req);
+    return 1;
 }
 
 static int handle_data(connection_t *conn, void *data, u32 len)
@@ -192,8 +188,7 @@ static int handle_data(connection_t *conn, void *data, u32 len)
         return 0;
     }
 
-    PRINT_CYAN("%15s:%-5u >> %s %s\n",
-        IPV4_BIN_TO_STR(conn->ip), conn->port, pkt->mth_str, pkt->uri);
+    INFO("%15s:%-5u >> %s %s", IPV4_BIN_TO_STR(conn->ip), conn->port, pkt->mth_str, pkt->uri);
 
     if (!request_init(&req, conn, pkt, &status)) {
         ERROR("Failed(%d) to init request for %s:%d, %s.",
@@ -203,10 +198,10 @@ static int handle_data(connection_t *conn, void *data, u32 len)
         return 0;
     }
 
-    if (str_starts_with(pkt->uri, conn->server->static_route)) {
-        ret = handle_static(&req);
+    if (str_starts_with(pkt->uri, conn->server->cfg.static_uri_prefix)) {
+        ret = handle_static((holyreq_t *)&req);
     } else {
-        ret = handle_dynamic(&req);
+        ret = handle_dynamic((holyreq_t *)&req);
     }
     
     req.free(&req);
@@ -317,13 +312,57 @@ static int set_route(server_t *self, char *uri, void *handler)
     }
 
     str_trim(uri_cp, "/");
-    ret = self->routes->set_sp(self->routes, uri, handler);
+    ret = self->routes->set_sp(self->routes, uri_cp, handler);
     free(uri_cp);
     return ret;
 }
 
-int server_init(server_t *self)
+static int check_n_set_cfg(server_t *self, holycfg_t *cfg)
 {
+    self->cfg = *cfg;
+    if (!cfg->port) {
+        self->cfg.port = 80;
+    }
+    if (!cfg->static_file_age) {
+        self->cfg.static_file_age = 7*24*3600;
+    }
+    if (!cfg->socket_timeout) {
+        self->cfg.socket_timeout = 60;
+    }
+    if (!cfg->session_timeout) {
+        self->cfg.session_timeout = 3600;
+    }
+    if (!cfg->max_content_len) {
+        self->cfg.max_content_len = 10*1024*1024;
+    }
+    if (!cfg->template_path) {
+        self->cfg.template_path = "template";
+    }
+    if (!cfg->static_path) {
+        self->cfg.static_path = "static";
+    }
+    if (!cfg->static_uri_prefix) {
+        self->cfg.static_uri_prefix = "/static/";
+    }
+    
+    self->cfg.template_path = strdup(self->cfg.template_path);
+    self->cfg.static_path = strdup(self->cfg.static_path);
+    self->cfg.static_uri_prefix = strdup(self->cfg.static_uri_prefix);
+    
+    if (!self->cfg.template_path || !self->cfg.static_path || !self->cfg.static_uri_prefix) {
+        FREE_IF_NOT_NULL(self->cfg.template_path);
+        FREE_IF_NOT_NULL(self->cfg.static_path);
+        FREE_IF_NOT_NULL(self->cfg.static_uri_prefix);
+        return 0;
+    }
+    
+    return 1;
+}
+
+int server_init(server_t *self, holycfg_t *cfg)
+{
+    holycfg_t defcfg = {0};
+    
     if (!self) {
         return 0;
     }
@@ -331,21 +370,19 @@ int server_init(server_t *self)
     if (self->inited == 0x9527) {
         return 1;
     }
+    
+    if (!cfg) {
+        cfg = &defcfg;
+    }
 
-    // set arguments
-    self->port = SERVER_PORT;
-    self->timeout = SOCK_TIMEOUT;
-    strncpy(self->template_path, TEMPLATE_PATH, sizeof self->template_path - 1);
-    strncpy(self->static_path, STATIC_PATH, sizeof self->static_path - 1);
-    strncpy(self->static_route, STATIC_URI_PREFIX, sizeof self->static_route - 1);
-    self->static_age = STATIC_FILE_AGE;
-    if (!BIND_ADDRESS || !BIND_ADDRESS[0] || !strcmp(BIND_ADDRESS, "*")) {
-        self->ip = 0;
-    } else {
-        self->ip = IPV4_STR_TO_BIN(BIND_ADDRESS);
+    if (!check_n_set_cfg(self, cfg)) {
+        return 0;
     }
 
     if (!server_listen(self)) {
+        FREE_IF_NOT_NULL(self->cfg.template_path);
+        FREE_IF_NOT_NULL(self->cfg.static_path);
+        FREE_IF_NOT_NULL(self->cfg.static_uri_prefix);
         return 0;
     }
 
@@ -353,6 +390,9 @@ int server_init(server_t *self)
     self->routes = new_dict();
     self->sessions = new_dict();
     if (!self->conns || !self->routes || !self->sessions) {
+        FREE_IF_NOT_NULL(self->cfg.template_path);
+        FREE_IF_NOT_NULL(self->cfg.static_path);
+        FREE_IF_NOT_NULL(self->cfg.static_uri_prefix);
         FREE_IF_NOT_NULL(self->conns);
         FREE_IF_NOT_NULL(self->routes);
         FREE_IF_NOT_NULL(self->sessions);

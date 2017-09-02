@@ -251,11 +251,13 @@ void str_append(char **s, char *d)
     len = strlen(*s) + strlen(d) + 1;
     new = (char *)malloc(len);
     if (!new) {
+        MEMFAIL();
         return;
     }
 
     strcpy(new, *s);
     strcat(new, d);
+    new[len - 1] = 0;
     free(*s);
     *s = new;
 }

@@ -56,6 +56,7 @@ void *set_timeout(u32 seconds, timer_handler_t handler, void *arg)
 {
     holytimer_t *t = (holytimer_t *)malloc(sizeof *t);
     if (!t) {
+        MEMFAIL();
         return NULL;
     }
 
@@ -74,6 +75,7 @@ void *set_interval(u32 seconds, timer_handler_t handler, void *arg)
 {
     holytimer_t *t = (holytimer_t *)malloc(sizeof *t);
     if (!t) {
+        MEMFAIL();
         return NULL;
     }
 

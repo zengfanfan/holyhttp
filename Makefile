@@ -3,10 +3,9 @@ export _DEBUG_ := y
 export CC := gcc
 export STRIP := strip
 
-TARGET := holyhttp
-
-OBJS := main.o
-SUBDIRS := utils server cgi
+TARGET := libholyhttp.so
+OBJS := holyhttp.o
+SUBDIRS := utils server
 
 CFLAGS-${_DEBUG_} += -g -ggdb
 CFLAGS-y += -I${TOP}
@@ -16,15 +15,12 @@ CFLAGS-y += -Werror
 CFLAGS-${_DEBUG_} += -DDEBUG_ON=1
 
 ########## DO NOT MODIFY THE BELOW ##########
-export CFLAGS := ${CFLAGS-y}
+export CFLAGS := ${CFLAGS-y} -fPIC
 
 include ${TOP}/common.mk
 
+all: subs ${TARGET}
 ${TARGET}: ${OBJS} ${SUBOBJS}
-	${CC} -o $@ $^
+	${CC} -shared -o $@ $^
 	${STRIP} $@
-
-test: subs test.o ${SUBOBJS}
-	${CC} -o $@ test.o ${SUBOBJS}
-	@echo
 

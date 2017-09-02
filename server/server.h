@@ -3,28 +3,24 @@
 
 #include <utils/dict.h>
 #include <utils/string.h>
+#include <holyhttp.h>
 #include "timer.h"
 
-#define PATH_LEN    200
+#define SERVER_NAME     "HolyHttp"
+#define SERVER_VERSION  "0.1"
 
 typedef struct server_s {
-    u16 port;
+    holycfg_t cfg;
     int fd;
     int epfd;
-    int ip;
     int inited;
     
-    char template_path[PATH_LEN + 1];
-    char static_path[PATH_LEN + 1];
-    char static_route[PATH_LEN + 1];
-    int static_age;
-    u32 timeout;
     dict_t *routes;
     dict_t *conns;
     dict_t *sessions;
     
     int (*run)(struct server_s *self);
-    int (*route)(struct server_s *self, char *route, void *handler);
+    int (*route)(struct server_s *self, char *uri, void *handler);
 
     time_t start;
     char start_time[GMT_TIME_STR_LEN + 1];
@@ -35,6 +31,6 @@ extern server_t holyserver;
 int epoll_add_fd(int epfd, int fd, int read);
 int epoll_mdf_fd(int epfd, int fd, int read);
 int epoll_del_fd(int epfd, int fd, int read);
-int server_init(server_t *self);
+int server_init(server_t *self, holycfg_t *cfg);
 
 #endif // HOLYHTTP_SERVER_H

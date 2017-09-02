@@ -2,10 +2,10 @@
 holyhttp
 test
 
-[cmake]
+#[cmake]
 cmake-*
 
-[source insight]
+#[source insight]
 *.IAB
 *.IAD
 *.IMB
@@ -18,7 +18,7 @@ cmake-*
 *.WK3
 *.SearchResults
 
-[core dump]
+#[core dump]
 core.*
 
 

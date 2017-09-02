@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <holyhttp.h>
 
 typedef enum {
     B_BLACK = 40,
@@ -43,19 +44,30 @@ typedef enum {
 #define PRINT_CYAN(fmt, ...)        PRINT_COLOR(B_BLACK, F_CYAN, fmt, ##__VA_ARGS__)
 #define PRINT_WHITE(fmt, ...)       PRINT_COLOR(B_BLACK, F_WHITE, fmt, ##__VA_ARGS__)
 
+extern holy_dbg_lvl_t holydebug;
+
+#define __LINE_FMT(fmt) "%04d %-10.10s: " fmt "\n", __LINE__, __func__
+
 #define DEBUG(fmt, args...) \
-    PRINT_CYAN("%04d %-15.15s: " fmt "\n", __LINE__, __func__, ##args)
+    if (holydebug >= HOLY_DBG_DEBUG) \
+    PRINT_CYAN(__LINE_FMT(fmt), ##args)
 #define INFO(fmt, args...) \
-    PRINT_WHITE("%04d %-15.15s: " fmt "\n", __LINE__, __func__, ##args)
+    if (holydebug >= HOLY_DBG_DETAIL) \
+    PRINT_WHITE(__LINE_FMT(fmt), ##args)
 #define WARN(fmt, args...) \
-    PRINT_YELLOW("%04d %-15.15s: " fmt "\n", __LINE__, __func__, ##args)
+    if (holydebug >= HOLY_DBG_WARN) \
+    PRINT_YELLOW(__LINE_FMT(fmt), ##args)
 #define ERROR(fmt, args...) \
-    PRINT_RED("%04d %-15.15s: " fmt "\n", __LINE__, __func__, ##args)
+    if (holydebug >= HOLY_DBG_ERROR) \
+    PRINT_RED(__LINE_FMT(fmt), ##args)
 #define FATAL(fmt, args...) \
-    PRINT_HOLY_RED("%04d %-15.15s: " fmt "\n", __LINE__, __func__, ##args)
+    if (holydebug >= HOLY_DBG_FATAL) \
+    PRINT_HOLY_RED(__LINE_FMT(fmt), ##args)
 
 #define ERROR_NO(fmt, args...) \
     ERROR("Failed(%d) to " fmt ", %s.", errno, ##args, strerror(errno))
+#define FATAL_NO(fmt, args...) \
+    FATAL("Failed(%d) to " fmt ", %s.", errno, ##args, strerror(errno))
 #define MEMFAIL(...) \
     ERROR("Out of memory!")
 

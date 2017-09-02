@@ -1,2 +1,3 @@
 # holyhttp
-Yet another http server written in C
+Yet another lib for http server written in C.
+

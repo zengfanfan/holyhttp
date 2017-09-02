@@ -1,7 +1,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <config.h>
 #include <utils/print.h>
 #include <utils/string.h>
 #include <utils/file.h>
@@ -11,7 +10,7 @@
 static char *get_cookie(request_t *self, char *name)
 {
     if (!self || !self->pkt || !name) {
-        return "";
+        return NULL;
     }
     return self->pkt->cookies->get_ss(self->pkt->cookies, name);
 }
@@ -61,7 +60,7 @@ static void gen_session_id(request_t *self, char *id, u32 size)
     // pid[0-8.hex] + bkdr(UA+port+ip)[8.hex] + rand()[0-16.hex]
     char upi[MAX_FIELD_VALUE_LEN * 2];
     char *ua = self->headers->get_ss(self->headers, "user-agent");
-    snprintf(upi, sizeof upi, "%s%u%u", ua ? ua : "", self->port, self->ip);
+    snprintf(upi, sizeof upi, "%s%u%u", ua ? ua : "", self->base.port, self->base.ip);
     
     id[0] = 0;
     STR_APPEND(id, size, uint_to_s64(get_now_us()));
@@ -71,11 +70,12 @@ static void gen_session_id(request_t *self, char *id, u32 size)
 
 static void check_session_timeout(void *args)
 {
-    session_t *ss = (session_t *)args;
+    session_t *ss = ((void **)args)[0];
+    u32 timeout = *(u32 *)(((void **)args)[1]);
     long now = get_sys_uptime();
     long interval = ss->last_req - now;
-    if (interval < SESSION_AGE) {
-        set_timeout(SESSION_AGE - interval, check_session_timeout, args);
+    if (interval < timeout) {
+        set_timeout(timeout - interval, check_session_timeout, args);
         return;
     }
     // timeout
@@ -87,8 +87,10 @@ static int get_or_new_session(request_t *self)
 {
     dict_t *sessions = self->server->sessions;
     session_t ss = {0};
-    u32 ret, len = 0;
+    u32 len = 0;
+    int ret;
     char *sid;
+    void *args[] = {NULL, &self->server->cfg.session_timeout};
 
     sid = get_cookie(self, SESSION_ID_NAME);
     if (!sid || !sid[0]) {
@@ -123,12 +125,13 @@ _new:
         return 0;
     }
     
-    if (!set_cookie(self, SESSION_ID_NAME, ss.id, SESSION_ID_AGE)) {
+    if (!set_cookie(self, SESSION_ID_NAME, ss.id, self->server->cfg.static_file_age)) {
         free_dict(ss.dict);
         return 0;
     }
 
-    set_timeout(SESSION_AGE, check_session_timeout, self->session);
+    args[0] = self->session;
+    set_timeout(self->server->cfg.static_file_age, check_session_timeout, args);
     
     return 1;
 }
@@ -142,13 +145,14 @@ static int response(request_t *self, status_code_t code,
     char *rsp, *now = gmtimestr(NOW);
     int ret;
 
-    if (self->method == HEAD_METHOD || !content) {
+    if (self->base.method == HEAD_METHOD || !content) {
         len = 0;
     }
     
     size = MAX_HEADER_LEN + len;
     rsp = (char *)malloc(size + 1);
     if (!rsp) {
+        MEMFAIL();
         return 0;
     }
 
@@ -202,11 +206,11 @@ static int response(request_t *self, status_code_t code,
 
     // print debug log
     if (location) {
-        PRINT_CYAN("%15s:%-5u << %d %s\n",
-            IPV4_BIN_TO_STR(self->ip), self->port, code, location);
+        INFO("%15s:%-5u << %d %s",
+            IPV4_BIN_TO_STR(self->base.ip), self->base.port, code, location);
     } else {
-        PRINT_CYAN("%15s:%-5u << %d %s\n",
-            IPV4_BIN_TO_STR(self->ip), self->port, code, strstatus(code));
+        INFO("%15s:%-5u << %d %s",
+            IPV4_BIN_TO_STR(self->base.ip), self->base.port, code, strstatus(code));
     }
 
     ret = self->conn->write(self->conn, rsp, size);
@@ -273,7 +277,7 @@ static int send_file(request_t *self, char *filename)
     }
 
     ret = response(self, OK, content, len, guest_mime_type(filename),
-                self->server->static_age, NULL, NULL, NULL);
+                self->server->cfg.static_file_age, NULL, NULL, NULL);
     free(content);
     return ret;
 }
@@ -305,8 +309,8 @@ static int send_srender(request_t *self, char *s, char *fmt, ...)
 
 static int send_frender_by(request_t *self, char *f, dataset_t *ds)
 {
-    static char abspath[MAX_URL_LEN];
-    join_path(abspath, sizeof(abspath), self->server->template_path, f);
+    static char abspath[MAX_URI_LEN];
+    join_path(abspath, sizeof(abspath), self->server->cfg.template_path, f);
     return send_html(self, frender_by(abspath, ds));
 }
 
@@ -314,9 +318,9 @@ static int send_frender(request_t *self, char *f, char *fmt, ...)
 {
     va_list ap;
     char *ret;
-    static char abspath[MAX_URL_LEN];
+    static char abspath[MAX_URI_LEN];
     
-    join_path(abspath, sizeof(abspath), self->server->template_path, f);
+    join_path(abspath, sizeof(abspath), self->server->cfg.template_path, f);
 
     va_start(ap, fmt);
     ret = vfrender(abspath, fmt, ap);
@@ -352,18 +356,19 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
 
     memset(self, 0, sizeof *self);
 
-    // attibutes
+    // attributes
     if (!dict_init(&self->cookies)) {
         return 0;
     }
+    self->base.ip = conn->ip;
+    self->base.port = conn->port;
+    self->base.method = pkt->method;
+    self->base.version = pkt->version;
+    self->base.uri = pkt->uri;
+    self->headers = pkt->fields;
     self->pkt = pkt;
     self->conn = conn;
     self->server = conn->server;
-    self->ip = conn->ip;
-    self->port = conn->port;
-    self->method = pkt->method;
-    self->headers = self->pkt->fields;
-    self->version = pkt->version;
 
     // session
     if (!get_or_new_session(self)) {
@@ -377,22 +382,22 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->session->last_req = get_sys_uptime();
 
     // methods
-    self->send_file = send_file;
-    self->send_html = send_html;
-    self->send_status = send_status;
-    self->response = response;
-    self->redirect = redirect;
-    self->redirect_top = redirect_top;
-    self->redirect_forever = redirect_forever;
-    self->get_cookie = get_cookie;
-    self->set_cookie = set_cookie;
-    self->del_cookie = del_cookie;
-    self->get_arg = get_arg;
-    self->free = free_request;
-    self->send_srender = send_srender;
-    self->send_frender = send_frender;
+    self->base.send_file = (typeof(self->base.send_file))send_file;
+    self->base.send_html = (typeof(self->base.send_html))send_html;
+    self->base.send_status = (typeof(self->base.send_status))send_status;
+    self->base.response = (typeof(self->base.response))response;
+    self->base.redirect = (typeof(self->base.redirect))redirect;
+    self->base.redirect_top = (typeof(self->base.redirect_top))redirect_top;
+    self->base.redirect_forever = (typeof(self->base.redirect_forever))redirect_forever;
+    self->base.get_cookie = (typeof(self->base.get_cookie))get_cookie;
+    self->base.set_cookie = (typeof(self->base.set_cookie))set_cookie;
+    self->base.del_cookie = (typeof(self->base.del_cookie))del_cookie;
+    self->base.get_arg = (typeof(self->base.get_arg))get_arg;
+    self->base.send_srender = (typeof(self->base.send_srender))send_srender;
+    self->base.send_frender = (typeof(self->base.send_frender))send_frender;
     self->send_srender_by = send_srender_by;
     self->send_frender_by = send_frender_by;
+    self->free = free_request;
 
     self->inited = 1;
 

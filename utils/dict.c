@@ -93,6 +93,7 @@ static int dict_set(dict_t *self, tlv_t *key, tlv_t *value)
     // new
     new = (dict_kv_t *)malloc(sizeof *new);
     if (!new) {
+        MEMFAIL();
         return 0;
     }
 
@@ -191,7 +192,7 @@ static char *get_str_str(dict_t *self, char *key)
     tlv_t *v;
     
     if (!key) {
-        return "";
+        return NULL;
     }
     
     v = get_type_type(self, TLV_STR, strlen(key) + 1, key);
@@ -392,6 +393,7 @@ dict_t *new_dict(void)
 {
     dict_t *self = (dict_t *)malloc(sizeof *self);
     if (!self) {
+        MEMFAIL();
         return NULL;
     }
     memset(self, 0, sizeof *self);
