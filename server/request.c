@@ -47,12 +47,36 @@ static void cookies_to_str(request_t *self, char *buf, u32 len)
     self->cookies.foreach(&self->cookies, cookie2str, args);
 }
 
-static int get_arg(request_t *self, char *name, void **value, u32 *vlen)
+static char *get_arg(request_t *self, char *name)
+{
+    if (!self || !self->pkt) {
+        return 0;
+    }
+    return self->pkt->args->get_ss(self->pkt->args, name);
+}
+
+static int get_bin_arg(request_t *self, char *name, void **value, u32 *vlen)
 {
     if (!self || !self->pkt) {
         return 0;
     }
     return self->pkt->args->get_sb(self->pkt->args, name, value, vlen);
+}
+
+static char *get_session(request_t *self, char *name)
+{
+    if (!self || !self->pkt || !name) {
+        return NULL;
+    }
+    return self->session->dict->get_ss(self->session->dict, name);
+}
+
+static int set_session(request_t *self, char *name, char *value)
+{
+    if (!self || !name) {
+        return 0;
+    }
+    return self->session->dict->set_ss(self->session->dict, name, value);
 }
 
 static void gen_session_id(request_t *self, char *id, u32 size)
@@ -333,6 +357,8 @@ static void free_request(request_t *self)
 {
     if (self) {
         --self->session->refer;
+        FREE_IF_NOT_NULL(self->conn->recv_buf);
+        self->conn->recv_buf = NULL;
         free_req_pkt(self->pkt);
         self->cookies.clear(&self->cookies);
     }
@@ -393,6 +419,9 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->base.set_cookie = (typeof(self->base.set_cookie))set_cookie;
     self->base.del_cookie = (typeof(self->base.del_cookie))del_cookie;
     self->base.get_arg = (typeof(self->base.get_arg))get_arg;
+    self->base.get_bin_arg = (typeof(self->base.get_bin_arg))get_bin_arg;
+    self->base.get_session = (typeof(self->base.get_session))get_session;
+    self->base.set_session = (typeof(self->base.set_session))set_session;
     self->base.send_srender = (typeof(self->base.send_srender))send_srender;
     self->base.send_frender = (typeof(self->base.send_frender))send_frender;
     self->send_srender_by = send_srender_by;

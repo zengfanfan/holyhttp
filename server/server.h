@@ -16,11 +16,14 @@ typedef struct server_s {
     int inited;
     
     dict_t *routes;
+    dict_t *whiteroutes;
     dict_t *conns;
     dict_t *sessions;
     
     int (*run)(struct server_s *self);
-    int (*route)(struct server_s *self, char *uri, void *handler);
+    int (*set_route)(struct server_s *self, char *uri, void *handler);
+    int (*set_whiteroute)(struct server_s *self, char *uri, void *handler);
+    void *prerouting;
 
     time_t start;
     char start_time[GMT_TIME_STR_LEN + 1];

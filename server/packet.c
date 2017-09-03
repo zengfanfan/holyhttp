@@ -433,7 +433,7 @@ req_pkt_t *new_req_pkt(char *data, u32 len, status_code_t *status)
     if (!parse_requset_line(&tmp, data, status)) {
         goto fail;
     }
-
+    
     query = strchr(tmp.uri, '?');
     if (query) {
         *query++ = 0;

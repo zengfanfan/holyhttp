@@ -128,7 +128,8 @@ typedef struct holyreq {
     int (*del_cookie)(struct holyreq *self, char *name);
     char *(*get_session)(struct holyreq *self, char *name);
     int (*set_session)(struct holyreq *self, char *name, char *value);
-    int (*get_arg)(struct holyreq *self, char *name, void **value, unsigned *vlen);
+    char *(*get_arg)(struct holyreq *self, char *name);
+    int (*get_bin_arg)(struct holyreq *self, char *name, void **value, unsigned *vlen);
     int (*response)(struct holyreq *self, status_code_t code,
                     void *content, unsigned len, char *type, int age,
                     char *location, char *encoding,
@@ -139,11 +140,70 @@ typedef struct holyreq {
 } holyreq_t;
 
 typedef void (*holyreq_handler_t)(holyreq_t *req);
+typedef int (*prerouting_t)(holyreq_t *req);
 
+/*
+    holyhttp_init - initialize the server
+    @cfg: configure parameters, see holycfg_t
+
+    This must be done before any other usage of holyhttp
+
+    return: 1-ok, 0-fail
+*/
 int holyhttp_init(holycfg_t *cfg);
+
+/*
+    holyhttp_run - run the server
+
+    This will block forever, like for(;;){}.
+*/
 void holyhttp_run();
-//int holyhttp_run_async();
+
+/*
+    holyhttp_run_async - run the server asynchronously
+
+    This will not block, and actually create a thread to run the server loop.
+*/
+//void holyhttp_run_async();
+
+/*
+    holyhttp_set_route - set handler of uri
+    @uri:
+    @handler: see holyreq_handler_t
+
+    If a request to @uri is detected, @handler will be called.
+
+    return: 1-ok, 0-fail
+*/
 int holyhttp_set_route(char *uri, holyreq_handler_t handler);
+
+/*
+    holyhttp_set_debug_level - set the debug level
+    @level: see holy_dbg_lvl_t
+*/
 void holyhttp_set_debug_level(holy_dbg_lvl_t level);
+
+/*
+    holyhttp_set_prerouting - set prerouting handler
+    @handler: see prerouting_t
+
+    If the request is not for static files or whiteroutes,
+    @handler will be proceed.
+    If @handler return 1, the request is allowed to proceed forward,
+    otherwise it will be ignored.
+*/
+void holyhttp_set_prerouting(prerouting_t handler);
+
+/*
+    holyhttp_set_white_route - set handler of uri
+    @uri:
+    @handler: see holyreq_handler_t
+
+    This is almost the same with holyhttp_set_route,
+    except that it will not proceed prerouting.
+
+    return: 1-ok, 0-fail
+*/
+int holyhttp_set_white_route(char *uri, holyreq_handler_t handler);
 
 #endif //HOLYHTTP_H

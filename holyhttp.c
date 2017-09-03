@@ -30,7 +30,6 @@ static void set_fd_limit(void)
     getrlimit(RLIMIT_NOFILE, &r);
     g_rlim_cur = r.rlim_cur;
     g_rlim_max = r.rlim_max;
-    DEBUG("fd limit = %lu %lu", g_rlim_cur, g_rlim_max);
 }
 
 int holyhttp_init(holycfg_t *cfg)
@@ -58,7 +57,13 @@ void holyhttp_run()
 
 int holyhttp_set_route(char *uri, holyreq_handler_t handler)
 {
-    return holyserver.route(&holyserver, uri, handler);
+    return holyserver.set_route(&holyserver, uri, handler);
+}
+
+
+int holyhttp_set_white_route(char *uri, holyreq_handler_t handler)
+{
+    return holyserver.set_whiteroute(&holyserver, uri, handler);
 }
 
 void holyhttp_set_debug_level(holy_dbg_lvl_t level)
@@ -68,5 +73,10 @@ void holyhttp_set_debug_level(holy_dbg_lvl_t level)
     } else {
         holydebug = level;
     }
+}
+
+void holyhttp_set_prerouting(prerouting_t handler)
+{
+    holyserver.prerouting = handler;
 }
 

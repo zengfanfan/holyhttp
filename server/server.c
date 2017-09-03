@@ -33,8 +33,10 @@ static int server_listen(server_t *self)
     }
     setsockopt(self->fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     setsockopt(self->fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+    
     setsockopt(self->fd, IPPROTO_TCP, TCP_DEFER_ACCEPT,
         &self->cfg.socket_timeout, sizeof(self->cfg.socket_timeout));
+    
     
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -127,9 +129,12 @@ static int accept_connection(server_t *self)
 
     conn = new_connection(self, fd, (u32)ntohl(src.sin_addr.s_addr), ntohs(src.sin_port));
     if (!conn) {
+        ERROR("Failed to create connection for fd %d", fd);
         close(fd);
         return 0;
     }
+    
+    DEBUG("fd = %d, port = %u", fd, ntohs(src.sin_port));
 
     self->conns->set_ip(self->conns, fd, conn);
     
@@ -140,15 +145,18 @@ static int handle_static(holyreq_t *req)
 {
     char path[MAX_PATH_LEN];
     char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
+    char *static_path = ((request_t *)req)->server->cfg.static_path;
     snprintf(path, sizeof path, "%s/%s",
-        static_uri_prefix, req->uri + strlen(static_uri_prefix));
+        static_path, req->uri + strlen(static_uri_prefix));
     return req->send_file(req, path);
 }
 
 static int handle_dynamic(holyreq_t *req)
 {
     route_handler_t handler;
+    prerouting_t prerouting = ((request_t *)req)->server->prerouting;
     dict_t *routes = ((request_t *)req)->server->routes;
+    dict_t *whiteroutes = ((request_t *)req)->server->whiteroutes;
     char path[MAX_PATH_LEN], *uri;
     char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
 
@@ -163,8 +171,21 @@ static int handle_dynamic(holyreq_t *req)
     }
 
     str_trim(uri, "/");
+    handler = whiteroutes->get_sp(whiteroutes, uri);
+    if (handler) {
+        free(uri);
+        goto handle;
+    }
+    
+    if (prerouting && !prerouting(req)) {
+        free(uri);
+        return 1;// ignore
+    }
+    
     handler = routes->get_sp(routes, uri);
     free(uri);
+
+handle:
 
     if (!handler) {
         return req->send_status(req, NOT_FOUND);
@@ -273,19 +294,21 @@ static int run_server(server_t *self)
             continue;
         }
 
+        if (nfds > 1) DEBUG("nfds = %d", nfds);
         // handle sockets
         for (i = 0; i < nfds; i++) {
             fd = evts[i].data.fd;
+            
             if (fd == self->fd) {// acceptable
                 accept_connection(self);
-            } else if (evts[i].events & EPOLLRDHUP) {
-                close_conn_by_fd(self, fd);
             } else if (evts[i].events & EPOLLIN) {// readable
                 read_data(self, fd);
             } else if (evts[i].events & EPOLLOUT) {// writable
                 write_data(self, fd);
             } else {
-                ERROR("Unexpected epoll event %x for fd %d", evts[i].events, fd);
+                if (!(evts[i].events & EPOLLRDHUP)) {
+                    ERROR("Unexpected epoll event %x for fd %d", evts[i].events, fd);
+                }
                 close_conn_by_fd(self, fd);
             }
         }
@@ -313,6 +336,26 @@ static int set_route(server_t *self, char *uri, void *handler)
 
     str_trim(uri_cp, "/");
     ret = self->routes->set_sp(self->routes, uri_cp, handler);
+    free(uri_cp);
+    return ret;
+}
+
+static int set_whiteroute(server_t *self, char *uri, void *handler)
+{
+    char *uri_cp;
+    int ret;
+    
+    if (!self || !uri || !handler) {
+        return 0;
+    }
+
+    uri_cp = strdup(uri);
+    if (!uri_cp) {
+        return 0;
+    }
+
+    str_trim(uri_cp, "/");
+    ret = self->whiteroutes->set_sp(self->whiteroutes, uri_cp, handler);
     free(uri_cp);
     return ret;
 }
@@ -388,19 +431,22 @@ int server_init(server_t *self, holycfg_t *cfg)
 
     self->conns = new_dict();
     self->routes = new_dict();
+    self->whiteroutes = new_dict();
     self->sessions = new_dict();
-    if (!self->conns || !self->routes || !self->sessions) {
+    if (!self->conns || !self->routes || !self->whiteroutes || !self->sessions) {
         FREE_IF_NOT_NULL(self->cfg.template_path);
         FREE_IF_NOT_NULL(self->cfg.static_path);
         FREE_IF_NOT_NULL(self->cfg.static_uri_prefix);
         FREE_IF_NOT_NULL(self->conns);
         FREE_IF_NOT_NULL(self->routes);
+        FREE_IF_NOT_NULL(self->whiteroutes);
         FREE_IF_NOT_NULL(self->sessions);
         return 0;
     }
 
     self->run = run_server;
-    self->route = set_route;
+    self->set_route = set_route;
+    self->set_whiteroute = set_whiteroute;
 
     self->inited = 0x9527;
     return 1;

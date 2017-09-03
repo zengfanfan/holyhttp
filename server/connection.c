@@ -133,10 +133,11 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     hlen = end - header + 4;
 
     // content length
-    tmp = strcasestr(header, "Content-Length");
+    tmp = strcasestr(header, "Content-Length:");
     if (tmp) {
-        sscanf(header, "%*[^:\r\n]:%*[^0-9]%10u", &clen);
+        sscanf(tmp, "%*[^0-9\r\n]%10u", &clen);
     }
+
     if (clen > self->server->cfg.max_content_len) {
         send_status(self, REQUEST_ENTITY_TOO_LARGE);
         return;
@@ -147,7 +148,7 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     }
 
     // make buffer
-    buf = self->recv_buf = (buffer_t *)malloc(sizeof(buffer_t) + hlen + clen);
+    buf = self->recv_buf = (buffer_t *)malloc(sizeof(buffer_t) + hlen + clen + 1);
     if (!buf) {
         MEMFAIL();
         send_status(self, INSUFFICIENT_STORAGE);
@@ -157,6 +158,7 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     buf->left = hlen + clen - received;
     buf->offset = received;
     memcpy(buf->data, header, received);
+    buf->data[hlen + clen] = 0;// make sure it's null-terminated
     if (!buf->left) {
         goto done;
     }
@@ -165,6 +167,7 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     for (; buf->left; buf->left -= received, buf->offset += received) {
         received = do_recv(self, buf->data + buf->offset, buf->left);
         if (received <= 0) {
+            DEBUG("!!!");
             return;// closed or continous
         }
     }
@@ -172,9 +175,8 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
 done:
     // ok, handle the new req
     clear_fd_buf(self->fd);
-    if (handler(self, buf->data, buf->offset)) {
-    }
-    free(buf);
+    handler(self, buf->data, buf->offset);
+    FREE_IF_NOT_NULL(self->recv_buf);
     self->recv_buf = NULL;
 }
 
