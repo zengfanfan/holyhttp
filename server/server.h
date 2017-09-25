@@ -9,6 +9,8 @@
 #define SERVER_NAME     "HolyHttp"
 #define SERVER_VERSION  "0.1"
 
+#define ARGS_BUF_LEN    (10*1024)
+
 typedef struct server_s {
     holycfg_t cfg;
     int fd;
@@ -19,6 +21,9 @@ typedef struct server_s {
     dict_t *whiteroutes;
     dict_t *conns;
     dict_t *sessions;
+
+    char *common_separator;
+    char common_args[ARGS_BUF_LEN];
     
     int (*run)(struct server_s *self);
     int (*set_route)(struct server_s *self, char *uri, void *handler);

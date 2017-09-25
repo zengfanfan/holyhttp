@@ -17,9 +17,9 @@
 
 #define FREE_IF_NOT_NULL(ptr) if (ptr) free(ptr)
 
-void str_trim_left(char *s, char *chars);
-void str_trim_right(char *s, char *chars);
-void str_trim(char *s, char *chars);
+void str_trim_left(char *s, char c);
+void str_trim_right(char *s, char c);
+void str_trim(char *s, char c);
 void str2lower(char *str);
 void str2upper(char *str);
 void replace_char(char *str, char old_char, char new_char);

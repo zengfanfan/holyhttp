@@ -9,20 +9,31 @@
 static char buffer[BUF_DEF_LEN] = {0};
 static const u32 buf_sz = sizeof buffer;
 
-#define STATUS_FMT \
+#define STATUS_BODY \
+    "<html><body><div style=\"margin:100px auto;color:#fff;backgound:#ccc\">"\
+    "<h1>%3d %s</h1></div></html></body>"
+#define STATUS_PACKET \
     "HTTP/1.1 %3d %s\r\n"\
     "Server: "SERVER_NAME"/"SERVER_VERSION"\r\n"\
     "Connection: close\r\n"\
     "Date: %s\r\n"\
-    "Content-Length: 0\r\n\r\n"
+    "Content-Type: text/html; charset=utf8\r\n"\
+    "Content-Length: %d\r\n\r\n"\
+    "%s"
 
 static int send_status(connection_t *self, status_code_t code)
 {
+    char body[sizeof(STATUS_BODY) * 2] = {0};
+    
     if (!self) {
         return 0;
     }
+    
     INFO("%15s:%-5u << %d %s", IPV4_BIN_TO_STR(self->ip), self->port, code, strstatus(code));
-    snprintf(buffer, buf_sz, STATUS_FMT, code, strstatus(code), gmtimestr(NOW));
+    snprintf(body, sizeof(body), STATUS_BODY, code, strstatus(code));
+    snprintf(buffer, buf_sz, STATUS_PACKET,
+        code, strstatus(code), gmtimestr(NOW), (int)strlen(body), body);
+    //holydump("buffer", buffer, strlen(buffer));
     return self->write(self, buffer, strlen(buffer));
 }
 
@@ -167,7 +178,6 @@ static void recv_from_peer(connection_t *self, data_handler_t handler)
     for (; buf->left; buf->left -= received, buf->offset += received) {
         received = do_recv(self, buf->data + buf->offset, buf->left);
         if (received <= 0) {
-            DEBUG("!!!");
             return;// closed or continous
         }
     }

@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <sys/resource.h>
 #include <utils/print.h>
 #include <server/server.h>
@@ -52,17 +53,29 @@ int holyhttp_init(holycfg_t *cfg)
 
 void holyhttp_run()
 {
+    if (!holyserver.inited) {
+        FATAL("Call holyhttp_init first!");
+        return;
+    }
     holyserver.run(&holyserver);
 }
 
 int holyhttp_set_route(char *uri, holyreq_handler_t handler)
 {
+    if (!holyserver.inited) {
+        FATAL("Call holyhttp_init first!");
+        return 0;
+    }
     return holyserver.set_route(&holyserver, uri, handler);
 }
 
 
 int holyhttp_set_white_route(char *uri, holyreq_handler_t handler)
 {
+    if (!holyserver.inited) {
+        FATAL("Call holyhttp_init first!");
+        return 0;
+    }
     return holyserver.set_whiteroute(&holyserver, uri, handler);
 }
 
@@ -78,5 +91,14 @@ void holyhttp_set_debug_level(holy_dbg_lvl_t level)
 void holyhttp_set_prerouting(prerouting_t handler)
 {
     holyserver.prerouting = handler;
+}
+
+void holyhttp_set_common_render_args(char *separator, char *fmt, ...)
+{
+    va_list ap;
+    holyserver.common_separator = separator;
+    va_start(ap, fmt);
+    vsnprintf(holyserver.common_args, sizeof holyserver.common_args, fmt, ap);
+    va_end(ap);
 }
 

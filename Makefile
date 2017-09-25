@@ -1,7 +1,5 @@
 export TOP := $(shell pwd)
 export _DEBUG_ := y
-export CC := gcc
-export STRIP := strip
 
 TARGET := libholyhttp.so
 OBJS := holyhttp.o

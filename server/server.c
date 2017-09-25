@@ -9,9 +9,13 @@
 #include "connection.h"
 #include "request.h"
 
-#define MAX_PATH_LEN    500
-
 #define EPOLL_EVT_SZ    1024
+
+#if 0
+#define EPOLL_MODE EPOLLET
+#else
+#define EPOLL_MODE 0//LT
+#endif
 
 #ifndef TCP_DEFER_ACCEPT
 #define TCP_DEFER_ACCEPT 9
@@ -32,7 +36,7 @@ static int server_listen(server_t *self)
         return 0;
     }
     setsockopt(self->fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-    setsockopt(self->fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+    //setsockopt(self->fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
     
     setsockopt(self->fd, IPPROTO_TCP, TCP_DEFER_ACCEPT,
         &self->cfg.socket_timeout, sizeof(self->cfg.socket_timeout));
@@ -66,7 +70,7 @@ int epoll_add_fd(int epfd, int fd, int read)
 {
     struct epoll_event evt;
     evt.data.fd = fd;
-    evt.events = EPOLLET|EPOLLRDHUP;
+    evt.events = EPOLL_MODE|EPOLLRDHUP;
     evt.events |= read ? EPOLLIN : EPOLLOUT;
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &evt) < 0) {
         ERROR_NO("add epoll %c%d", read?'r':'w', fd);
@@ -80,7 +84,7 @@ int epoll_mdf_fd(int epfd, int fd, int read)
 {
     struct epoll_event evt;
     evt.data.fd = fd;
-    evt.events = EPOLLET|EPOLLRDHUP;
+    evt.events = EPOLL_MODE|EPOLLRDHUP;
     evt.events |= read ? EPOLLIN : EPOLLOUT;
     if (epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &evt) < 0) {
         ERROR_NO("set epoll %c%d", read?'r':'w', fd);
@@ -94,7 +98,7 @@ int epoll_del_fd(int epfd, int fd, int read)
 {
     struct epoll_event evt;
     evt.data.fd = fd;
-    evt.events = EPOLLET|EPOLLRDHUP;
+    evt.events = EPOLL_MODE|EPOLLRDHUP;
     evt.events |= read ? EPOLLIN : EPOLLOUT;
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &evt) < 0) {
         ERROR_NO("del epoll %c%d", read?'r':'w', fd);
@@ -134,8 +138,6 @@ static int accept_connection(server_t *self)
         return 0;
     }
     
-    DEBUG("fd = %d, port = %u", fd, ntohs(src.sin_port));
-
     self->conns->set_ip(self->conns, fd, conn);
     
     return 1;
@@ -146,8 +148,11 @@ static int handle_static(holyreq_t *req)
     char path[MAX_PATH_LEN];
     char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
     char *static_path = ((request_t *)req)->server->cfg.static_path;
-    snprintf(path, sizeof path, "%s/%s",
-        static_path, req->uri + strlen(static_uri_prefix));
+    char *relative_path = req->uri + strlen(static_uri_prefix);
+    if (relative_path[0] == '/') {
+        ++relative_path;
+    }
+    join_path(path, sizeof path, static_path, relative_path);
     return req->send_file(req, path);
 }
 
@@ -161,7 +166,7 @@ static int handle_dynamic(holyreq_t *req)
     char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
 
     if (!strcasecmp(req->uri, "/favicon.ico")) {
-        snprintf(path, sizeof path, "%sfavicon.ico", static_uri_prefix);
+        join_path(path, sizeof path, static_uri_prefix, "favicon.ico");
         return req->redirect_forever(req, path);
     }
     
@@ -170,7 +175,7 @@ static int handle_dynamic(holyreq_t *req)
         return req->send_status(req, INSUFFICIENT_STORAGE);
     }
 
-    str_trim(uri, "/");
+    str_trim(uri, '/');
     handler = whiteroutes->get_sp(whiteroutes, uri);
     if (handler) {
         free(uri);
@@ -181,6 +186,7 @@ static int handle_dynamic(holyreq_t *req)
         free(uri);
         return 1;// ignore
     }
+
     
     handler = routes->get_sp(routes, uri);
     free(uri);
@@ -209,7 +215,8 @@ static int handle_data(connection_t *conn, void *data, u32 len)
         return 0;
     }
 
-    INFO("%15s:%-5u >> %s %s", IPV4_BIN_TO_STR(conn->ip), conn->port, pkt->mth_str, pkt->uri);
+    INFO("%15s:%-5u >> %s %s",
+        IPV4_BIN_TO_STR(conn->ip), conn->port, pkt->mth_str, pkt->uri);
 
     if (!request_init(&req, conn, pkt, &status)) {
         ERROR("Failed(%d) to init request for %s:%d, %s.",
@@ -266,7 +273,8 @@ static void close_conn_by_fd(server_t *self, int fd)
 static int run_server(server_t *self)
 {
     struct epoll_event evts[EPOLL_EVT_SZ];
-    int nfds, i, fd, timeout;
+    int nfds, i, fd;
+    i64 timeout;
     
     self->epfd = epoll_create(EPOLL_EVT_SZ);
     if (self->epfd < 0) {
@@ -287,14 +295,13 @@ static int run_server(server_t *self)
 
     for (;;) {
         timeout = get_min_timeout();
-        nfds = epoll_wait(self->epfd, evts, EPOLL_EVT_SZ, timeout * 1000);
+        nfds = epoll_wait(self->epfd, evts, EPOLL_EVT_SZ, timeout);
         if (nfds < 0) {
             ERROR_NO("wait epoll");
             sleep(1);
             continue;
         }
 
-        if (nfds > 1) DEBUG("nfds = %d", nfds);
         // handle sockets
         for (i = 0; i < nfds; i++) {
             fd = evts[i].data.fd;
@@ -334,7 +341,7 @@ static int set_route(server_t *self, char *uri, void *handler)
         return 0;
     }
 
-    str_trim(uri_cp, "/");
+    str_trim(uri_cp, '/');
     ret = self->routes->set_sp(self->routes, uri_cp, handler);
     free(uri_cp);
     return ret;
@@ -354,7 +361,7 @@ static int set_whiteroute(server_t *self, char *uri, void *handler)
         return 0;
     }
 
-    str_trim(uri_cp, "/");
+    str_trim(uri_cp, '/');
     ret = self->whiteroutes->set_sp(self->whiteroutes, uri_cp, handler);
     free(uri_cp);
     return ret;

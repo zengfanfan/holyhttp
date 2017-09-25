@@ -11,6 +11,7 @@ typedef struct session {
     dict_t *parent;
     dict_t *dict;
     long last_req;
+    u32 timeout;
     u32 refer;
 } session_t;
 

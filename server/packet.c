@@ -1,4 +1,5 @@
 #include <utils/print.h>
+#include <utils/string.h>
 #include "packet.h"
 
 char *strstatus(status_code_t code)
@@ -129,6 +130,59 @@ char *strstatus(status_code_t code)
     }
 }
 
+static char hex2char(char hex)
+{
+    if (hex >= '0' && hex <= '9') {
+        return hex - '0';
+    }
+    if (hex >= 'A' && hex <= 'Z') {
+        return hex - 'A' + 0xA;
+    }
+    if (hex >= 'a' && hex <= 'z') {
+        return hex - 'a' + 0xa;
+    }
+
+    return hex;
+}
+
+static void url_decode(char *url)
+{
+    int i, j;
+    int qlen = strlen(url);
+    
+    for (i = j = 0; i < qlen; ++i, ++j) {
+        if (url[i] == '%' && (i+2) < qlen) {
+            url[j] = (hex2char(url[i+1])<<4) | hex2char(url[i+2]);
+            i += 2;
+        } else if (url[i] == '+'){
+            url[j] = ' ';
+        } else {
+            url[j] = url[i];
+        }
+    }
+
+    url[j] = 0;
+}
+
+void url_encode(char *url, char *buf, unsigned len)
+{
+    int i, j;
+    int qlen = strlen(url);
+    char hex[3];
+    
+    for (i = j = 0; i < qlen && j < len-1; ++i, ++j) {
+        if (!isalnum(url[i])) {
+            snprintf(hex, sizeof hex, "%0x2hh", url[i]);
+            strcpy(&buf[j], hex);
+            j += 2;
+        } else {
+            buf[j] = url[i];
+        }
+    }
+
+    buf[j] = 0;
+}
+
 static int parse_method(req_pkt_t *self, char *method, status_code_t *status)
 {
     if (!strcmp(method, "HEAD")) {
@@ -154,7 +208,7 @@ static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status
 
     // GET /uri?query=1&key=value HTTP/1.1\r\n
     snprintf(fmt, sizeof fmt, "%%%ds %%%ds HTTP/%%u.%%u\r\n", MAX_METHOD_LEN, MAX_URI_LEN);
-    ret = sscanf((char *)data, fmt, self->mth_str, self->uri, &major_ver, &sub_ver);
+    ret = sscanf((char *)data, fmt, self->mth_str, self->url, &major_ver, &sub_ver);
     if (ret != 4) {
         *status = BAD_REQUEST;
         return 0;
@@ -164,7 +218,7 @@ static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status
         return 0;
     }
 
-    if (strlen(self->uri) >= MAX_URI_LEN) {
+    if (strlen(self->url) >= MAX_URI_LEN) {
         *status = REQUEST_URI_TOO_LONG;
         return 0;
     }
@@ -186,18 +240,23 @@ static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status
 
 static int parse_query(req_pkt_t *self, char *query, status_code_t *status)
 {
-    int ret;
-    char fmt[MAX_URI_LEN], *pair;
-    char name[MAX_FIELD_NAME_LEN + 1], value[MAX_FIELD_VALUE_LEN + 1];
+    char *name, *value, *tmp, *pair;
+    char empty[] = "";
 
     // name=value&name=value
-    snprintf(fmt, sizeof fmt, "%%%d[^=]=%%%d[^&]", MAX_FIELD_NAME_LEN, MAX_FIELD_VALUE_LEN);
     foreach_item_in_str(pair, query, "&") {
-        value[0] = 0; // value may be absent
-        ret = sscanf(pair, fmt, name, value);
-        if (ret != 1 && ret != 2) {
-            continue;
+        name = pair;
+        tmp = strchr(name, '=');
+        if (!tmp) {
+            value = empty;// value may be absent
+        } else {
+            *tmp = 0;
+            value = tmp + 1;
         }
+
+        url_decode(name);
+        url_decode(value);
+        
         self->args->set_ss(self->args, name, value);
     }
     
@@ -399,7 +458,7 @@ static int parse_cookies(req_pkt_t *self, status_code_t *status)
         if (ret != 1 && ret != 2) {
             continue;
         }
-        str_trim(name, " ");
+        str_trim(name, ' ');
         self->cookies->set_ss(self->cookies, name, value);
     }
 
@@ -434,12 +493,14 @@ req_pkt_t *new_req_pkt(char *data, u32 len, status_code_t *status)
         goto fail;
     }
     
-    query = strchr(tmp.uri, '?');
+    query = strchr(tmp.url, '?');
     if (query) {
-        *query++ = 0;
-        if (!parse_query(&tmp, query, status)) {
+        strncpy(tmp.uri, tmp.url, query - tmp.url);
+        if (!parse_query(&tmp, query + 1, status)) {
             goto fail;
         }
+    } else {
+        strcpy(tmp.uri, tmp.url);
     }
 
     if (!parse_headers(&tmp, data, status, &content)) {

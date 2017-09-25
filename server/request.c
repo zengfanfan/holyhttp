@@ -7,6 +7,20 @@
 #include <utils/address.h>
 #include "request.h"
 
+static char *get_header(request_t *self, char *name)
+{
+    char *ret;
+    name = name ? strdup(name) : NULL;
+    if (!self || !self->headers || !name) {
+        FREE_IF_NOT_NULL(name);
+        return NULL;
+    }
+    str2lower(name);
+    ret = self->headers->get_ss(self->headers, name);
+    FREE_IF_NOT_NULL(name);
+    return ret;
+}
+
 static char *get_cookie(request_t *self, char *name)
 {
     if (!self || !self->pkt || !name) {
@@ -22,9 +36,9 @@ static int set_cookie(request_t *self, char *name, char *value, int age)
     if (!self || !name || !value) {
         return 0;
     }
-    STR_APPEND(cookie, size, "%s; HttpOnly", value ? value : "");
+    STR_APPEND(cookie, size, "%s; HttpOnly; Path=/;", value ? value : "");
     if (age >= 0) {
-        STR_APPEND(cookie, size, "; Max-Age=%d", age);
+        STR_APPEND(cookie, size, " Max-Age=%d;", age);
     }
     return self->cookies.set_ss(&self->cookies, name, cookie);
 }
@@ -65,7 +79,7 @@ static int get_bin_arg(request_t *self, char *name, void **value, u32 *vlen)
 
 static char *get_session(request_t *self, char *name)
 {
-    if (!self || !self->pkt || !name) {
+    if (!self || !name) {
         return NULL;
     }
     return self->session->dict->get_ss(self->session->dict, name);
@@ -94,17 +108,22 @@ static void gen_session_id(request_t *self, char *id, u32 size)
 
 static void check_session_timeout(void *args)
 {
-    session_t *ss = ((void **)args)[0];
-    u32 timeout = *(u32 *)(((void **)args)[1]);
+    session_t *ss = args;
     long now = get_sys_uptime();
-    long interval = ss->last_req - now;
-    if (interval < timeout) {
-        set_timeout(timeout - interval, check_session_timeout, args);
+    long interval = now - ss->last_req;
+
+    if (interval < ss->timeout) {
+        set_timeout(ss->timeout - interval, check_session_timeout, args);
         return;
     }
     // timeout
-    free_dict(ss->dict);
-    ss->parent->del_s(ss->parent, ss->id);
+    if (ss->refer > 0) {
+        ss->dict->clear(ss->dict);
+        set_timeout(1, check_session_timeout, args);//try it later
+    } else {
+        free_dict(ss->dict);
+        ss->parent->del_s(ss->parent, ss->id);
+    }
 }
 
 static int get_or_new_session(request_t *self)
@@ -114,7 +133,6 @@ static int get_or_new_session(request_t *self)
     u32 len = 0;
     int ret;
     char *sid;
-    void *args[] = {NULL, &self->server->cfg.session_timeout};
 
     sid = get_cookie(self, SESSION_ID_NAME);
     if (!sid || !sid[0]) {
@@ -138,6 +156,7 @@ _new:
     }
 
     ss.parent = sessions;
+    ss.timeout = self->server->cfg.session_timeout;
     
     if (!sessions->set_sb(sessions, ss.id, &ss, sizeof ss)) {
         free_dict(ss.dict);
@@ -154,8 +173,7 @@ _new:
         return 0;
     }
 
-    args[0] = self->session;
-    set_timeout(self->server->cfg.static_file_age, check_session_timeout, args);
+    set_timeout(self->server->cfg.session_timeout, check_session_timeout, self->session);
     
     return 1;
 }
@@ -256,8 +274,8 @@ static int redirect_top(request_t *self, char *location)
     if (!location) {
         return 0;
     }
-    snprintf(content, sizeof content, "<script>top.location.href='%s'</script>", location);
-    return response(self, OK, content, strlen(content), "text", 0, location, NULL, NULL);
+    snprintf(content, sizeof content, "<script>top.location.href='%s';</script>", location);
+    return response(self, OK, content, strlen(content), "text/html", 0, NULL, NULL, NULL);
 }
 
 static int redirect_forever(request_t *self, char *location)
@@ -297,6 +315,7 @@ static int send_file(request_t *self, char *filename)
     }
     
     if (!get_file(filename, &content, &len)) {
+        ERROR();
         return send_status(self, NOT_FOUND);
     }
 
@@ -314,43 +333,62 @@ static int send_html(request_t *self, char *html)
     return response(self, OK, html, strlen(html), "text/html", 0, NULL, NULL, NULL);
 }
 
-static int send_srender_by(request_t *self, char *s, dataset_t *ds)
+static int send_srender_by(request_t *self, char *s, char *args)
 {
-    return send_html(self, srender_by(s, ds));
+    dataset_t ds = {.inited=0};
+    char *res;
+
+    dataset_init(&ds);
+    
+    ds.set_batch(&ds, self->server->common_args, self->server->common_separator);
+    ds.set_batch(&ds, args, self->base.render_separator);
+    res = srender_by(s, &ds);
+    ds.clear(&ds);
+
+    return send_html(self, res);
 }
 
 static int send_srender(request_t *self, char *s, char *fmt, ...)
 {
     va_list ap;
-    char *ret;
+    char args[ARGS_BUF_LEN];
 
     va_start(ap, fmt);
-    ret = vsrender(s, fmt, ap);
+    vsnprintf(args, sizeof(args), fmt, ap);
     va_end(ap);
-
-    return send_html(self, ret);
+    
+    return send_srender_by(self, s, args);
 }
 
-static int send_frender_by(request_t *self, char *f, dataset_t *ds)
+static int send_frender_by(request_t *self, char *f, char *args)
 {
-    static char abspath[MAX_URI_LEN];
+    char abspath[MAX_URI_LEN];
+    dataset_t ds = {.inited=0};
+    char *res;
+    
     join_path(abspath, sizeof(abspath), self->server->cfg.template_path, f);
-    return send_html(self, frender_by(abspath, ds));
+
+    dataset_init(&ds);
+    
+    ds.set_batch(&ds, self->server->common_args, self->server->common_separator);
+    ds.set_batch(&ds, args, self->base.render_separator);
+    
+    res = frender_by(abspath, &ds);
+    ds.clear(&ds);
+
+    return send_html(self, res);
 }
 
 static int send_frender(request_t *self, char *f, char *fmt, ...)
 {
     va_list ap;
-    char *ret;
-    static char abspath[MAX_URI_LEN];
+    char args[ARGS_BUF_LEN];
     
-    join_path(abspath, sizeof(abspath), self->server->cfg.template_path, f);
-
     va_start(ap, fmt);
-    ret = vfrender(abspath, fmt, ap);
+    vsnprintf(args, sizeof(args), fmt, ap);
     va_end(ap);
 
-    return send_html(self, ret);
+    return send_frender_by(self, f, args);
 }
 
 static void free_request(request_t *self)
@@ -391,6 +429,8 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->base.method = pkt->method;
     self->base.version = pkt->version;
     self->base.uri = pkt->uri;
+    self->base.url = pkt->url;
+    self->base.render_separator = ",";
     self->headers = pkt->fields;
     self->pkt = pkt;
     self->conn = conn;
@@ -415,6 +455,7 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->base.redirect = (typeof(self->base.redirect))redirect;
     self->base.redirect_top = (typeof(self->base.redirect_top))redirect_top;
     self->base.redirect_forever = (typeof(self->base.redirect_forever))redirect_forever;
+    self->base.get_header = (typeof(self->base.get_header))get_header;
     self->base.get_cookie = (typeof(self->base.get_cookie))get_cookie;
     self->base.set_cookie = (typeof(self->base.set_cookie))set_cookie;
     self->base.del_cookie = (typeof(self->base.del_cookie))del_cookie;
@@ -424,8 +465,8 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->base.set_session = (typeof(self->base.set_session))set_session;
     self->base.send_srender = (typeof(self->base.send_srender))send_srender;
     self->base.send_frender = (typeof(self->base.send_frender))send_frender;
-    self->send_srender_by = send_srender_by;
-    self->send_frender_by = send_frender_by;
+    self->base.send_srender_by = (typeof(self->base.send_srender_by))send_srender_by;
+    self->base.send_frender_by = (typeof(self->base.send_frender_by))send_frender_by;
     self->free = free_request;
 
     self->inited = 1;

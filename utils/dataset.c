@@ -2,14 +2,13 @@
 
 static data_subset_t *new_subset(void)
 {
-    data_subset_t *set = (data_subset_t *)malloc(sizeof *set);
+    data_subset_t *set = malloc(sizeof *set);
     if (!set) {
         MEMFAIL();
         return NULL;
     }
     memset(set, 0, sizeof *set);
     dict_init(&set->children);
-    set->value = NULL;
     return set;
 }
 
@@ -42,17 +41,14 @@ static data_subset_t *get_sub(dataset_t *self, char *name)
 static char *get_value(dataset_t *self, char *name)
 {
     data_subset_t *sub = get_sub(self, name);
-    if (!sub) {
-        return NULL;
-    }
-    return sub->value ? sub->value : name;
+    return sub ? sub->value : NULL;
 }
 
 static int set_value(dataset_t *self, char *name, char *value)
 {
     char *name_cp = name ? strdup(name) : NULL;
     char *item;
-    data_subset_t *sub, *new;
+    data_subset_t *sub;
     void *pos;
     
     if (!self || !name || !value) {
@@ -68,13 +64,13 @@ static int set_value(dataset_t *self, char *name, char *value)
             continue;
         }
         // new one
-        new = new_subset();
-        if (!new) {
+        pos = new_subset();
+        if (!pos) {
             free(name_cp);
             return 0;
         }
-        sub->children.set_sp(&sub->children, item, new);
-        sub = new;
+        sub->children.set_sp(&sub->children, item, pos);
+        sub = pos;
     }
 
     free(name_cp);
@@ -83,18 +79,52 @@ static int set_value(dataset_t *self, char *name, char *value)
     return !!sub->value;
 }
 
+static int set_batch(dataset_t *self, char *nvs, char *separator)
+{
+    char *nvs_cp, *eq, *key, *val, *pair;
+    
+    if (!self || !nvs) {
+        return 0;
+    }
+
+    nvs_cp = strdup(nvs);
+    if (!nvs_cp) {
+        return 0;
+    }
+    
+    // fmt = "key=val,xxx=xxx"
+    foreach_item_in_str(pair, nvs_cp, separator) {
+        key = pair;
+        eq = strchr(pair, '=');
+        if (!eq) {
+            val = "";
+        } else {
+            *eq = 0;
+            val = eq + 1;
+        }
+        set_value(self, key, val);
+    }
+
+    free(nvs_cp);
+    return 1;
+}
+
 static void clear_sub_values(data_subset_t *sub);
 static void _free_each_child(tlv_t *key, tlv_t *value, void *args)
 {
     data_subset_t *sub = (data_subset_t *)TLVPTR(value);
-    clear_sub_values(sub);
-    free(sub);
+    if (sub) {
+        clear_sub_values(sub);
+        free(sub);
+    }
 }
 
 static void clear_sub_values(data_subset_t *sub)
 {
     FREE_IF_NOT_NULL(sub->value);
+    sub->value = NULL;
     sub->children.foreach(&sub->children, _free_each_child, NULL);
+    dict_init(&sub->children);
 }
 
 static void clear_data_set(dataset_t *self)
@@ -139,8 +169,9 @@ static void _handle_each_value(tlv_t *key, tlv_t *value, void *args)
     data_subset_t *sub = TLVPTR(value);
     
     if (sub->value) {
-        handler(sub->value, arg);
-        return;
+        handler(1, sub->value, arg);
+    } else {
+        handler(0, sub, arg);
     }
 }
 
@@ -172,6 +203,7 @@ int dataset_init(dataset_t *self)
 
     self->get = get_value;
     self->set = set_value;
+    self->set_batch = set_batch;
     self->show = show_values;
     self->foreach_by = foreach_by_name;
     self->clear = clear_data_set;

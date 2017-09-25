@@ -32,7 +32,7 @@ typedef enum {
 #define STYLE_NONE  "\033[0m"
 
 #define PRINT_COLOR(b_color, f_color, fmt, ...) \
-    printf(STYLE_FMT fmt STYLE_NONE, b_color, f_color, ##__VA_ARGS__)
+    printf(STYLE_FMT fmt STYLE_NONE, b_color, f_color, ##__VA_ARGS__);fflush(stdout)
 
 #define PRINT_NORMAL(fmt, ...)      printf(STYLE_NONE fmt STYLE_NONE, ##__VA_ARGS__)
 #define PRINT_HOLY_RED(fmt, ...)    PRINT_COLOR(B_RED, F_WHITE, fmt, ##__VA_ARGS__)

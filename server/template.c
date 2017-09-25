@@ -72,6 +72,7 @@ typedef struct {
 #define TMPL_NAME_LEN   100
 #define TMPL_OP_LEN     3// > < >= <= == !=
 #define TMPL_FMT_LEN    100
+#define FOR_ITEM_NAME_PREFIX    ":for:"
 
 
 //==========================================================
@@ -161,15 +162,22 @@ static char *render_if_elem(void *elem, dataset_t *ds)
     }
 }
 
-static void _render_each_item(char *value, void *args)
+static void _render_each_item(int leaf, void *value, void *args)
 {
     void **params = (void **)args;
-    for_elem_t *fe = (for_elem_t *)params[0];
-    dataset_t *ds = (dataset_t *)params[1];
-    char **presult = (char **)params[2];
-    char *tmp;
+    for_elem_t *fe = params[0];
+    dataset_t *ds = params[1];
+    char **presult = params[2];
+    char *item_name = params[3];
+    void *tmp;
 
-    ds->set(ds, fe->item, value);
+    if (leaf) {
+        ds->set(ds, item_name, value);
+    } else {
+        ds->sub.children.set_sp(&ds->sub.children, item_name, value);
+    }
+    
+    // render
     tmp = render_normal_elem(fe->body, ds);
     str_append(presult, tmp);
     free(tmp);
@@ -178,22 +186,13 @@ static void _render_each_item(char *value, void *args)
 static char *render_for_elem(void *elem, dataset_t *ds)
 {
     for_elem_t *fe = (for_elem_t *)elem;
-    char *result = NULL;
-    void *params[] = {fe, ds, &result};
-    char *backup_item = ds->get(ds, fe->item);
+    char *result = NULL, item_name[TMPL_NAME_LEN] = FOR_ITEM_NAME_PREFIX;
+    void *params[] = {fe, ds, &result, item_name};
 
-    // backup
-    if (backup_item) {
-        backup_item = strdup(backup_item);
-    }
-    // handle
+    STR_APPEND(item_name, sizeof(item_name), "%s", fe->item);
     ds->foreach_by(ds, fe->list, _render_each_item, params);
-    // restore
-    if (backup_item) {
-        ds->set(ds, fe->item, backup_item);
-        free(backup_item);
-    }
-
+    ds->sub.children.set_sp(&ds->sub.children, item_name, NULL);
+    
     return result;
 }
 
@@ -202,7 +201,7 @@ static char *render_normal_elem(void *elem, dataset_t *ds)
     normal_elem_t *self = (normal_elem_t *)elem;
     base_elem_t *be;
     char *result = NULL, *text, *item, *value, *tmp;
-    char name[TMPL_NAME_LEN + 1], end[2];
+    char name[TMPL_NAME_LEN + 1], for_name[TMPL_NAME_LEN + 1], end[2];
     char fmt1[TMPL_FMT_LEN + 1], fmt2[TMPL_FMT_LEN + 1];
     int ret, first_is_var, first = 1;
     u32 nlen;
@@ -221,7 +220,7 @@ static char *render_normal_elem(void *elem, dataset_t *ds)
         }
 
         first_is_var = text[0] == '@';
-        snprintf(fmt1, sizeof fmt1, "%%%d[a-zA-Z0-9.]", TMPL_NAME_LEN);
+        snprintf(fmt1, sizeof fmt1, "%%%d[a-zA-Z0-9_.]", TMPL_NAME_LEN);
         snprintf(fmt2, sizeof fmt2, "{%%%d[^}]%%%d[\\}]", TMPL_NAME_LEN - 2, 1);
 
         foreach_item_in_str(item, text, "@") {
@@ -238,9 +237,16 @@ static char *render_normal_elem(void *elem, dataset_t *ds)
                 ret = sscanf(item, fmt2, name, end) == 2;
                 nlen = strlen(name) + 2; // @{xxx}
             }
-            if (ret) {
-                value = ds->get(ds, name);
-                if (value && value[0]) {
+
+            snprintf(for_name, sizeof for_name, "%s%s", FOR_ITEM_NAME_PREFIX, name);
+            
+            if (ret) {// render
+                value = ds->get(ds, for_name);
+                if (!value) {
+                    value = ds->get(ds, name);
+                }
+
+                if (value) {
                     str_append(&result, value);
                     str_append(&result, item + nlen);
                     continue;
@@ -388,7 +394,7 @@ static int parse_for_elem(char *text, u32 len, char **pnext, for_elem_t **pelem)
 
     // "#for <item> in <list>:"
 
-    snprintf(fmt1, sizeof fmt1, "#for @%%%d[0-9a-zA-Z.] in @%%%d[0-9a-zA-Z.]:",
+    snprintf(fmt1, sizeof fmt1, "#for @%%%d[0-9a-zA-Z] in @%%%d[0-9a-zA-Z.]:",
         TMPL_NAME_LEN, TMPL_NAME_LEN);
 
     ret = sscanf(text, fmt1, item, list);
@@ -559,6 +565,7 @@ char *srender_by(char *s, dataset_t *ds)
     }
     
     result = render_normal_elem((normal_elem_t *)root, ds);
+    
     if (result) {
         FREE_LATER(result);
         return result;
@@ -595,7 +602,7 @@ static void args2ds(dataset_t *ds, char *fmt, va_list ap)
     }
     
     dataset_init(ds);
-    
+
     replace_char(fmt, ',', 1);
     vsnprintf(values, sizeof values, fmt, ap);
 

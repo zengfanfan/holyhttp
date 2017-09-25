@@ -18,8 +18,6 @@ typedef struct request {
     dict_t *headers;
     session_t *session;
 
-    int (*send_srender_by)(struct request *self, char *s, dataset_t *ds);
-    int (*send_frender_by)(struct request *self, char *f, dataset_t *ds);
     void (*free)(struct request *self);
 } request_t;
 

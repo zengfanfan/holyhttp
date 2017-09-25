@@ -116,13 +116,17 @@ typedef struct holyreq {
     unsigned short port;
     method_t method;
     version_t version;
-    char *uri;
+    char *url, *uri;
+    char *render_separator;// default to ","
 
     int (*send_file)(struct holyreq *self, char *filename);
     int (*send_html)(struct holyreq *self, char *html);
     int (*send_status)(struct holyreq *self, status_code_t code);
-    int (*send_srender)(struct holyreq *self, char *s, char *fmt, ...);
-    int (*send_frender)(struct holyreq *self, char *f, char *fmt, ...);
+    int (*send_srender)(struct holyreq *self, char *string, char *fmt, ...);
+    int (*send_frender)(struct holyreq *self, char *filename, char *fmt, ...);
+    int (*send_srender_by)(struct holyreq *self, char *s, char *args);
+    int (*send_frender_by)(struct holyreq *self, char *f, char *args);
+    char *(*get_header)(struct holyreq *self, char *name);
     char *(*get_cookie)(struct holyreq *self, char *name);
     int (*set_cookie)(struct holyreq *self, char *name, char *value, int age);
     int (*del_cookie)(struct holyreq *self, char *name);
@@ -205,5 +209,15 @@ void holyhttp_set_prerouting(prerouting_t handler);
     return: 1-ok, 0-fail
 */
 int holyhttp_set_white_route(char *uri, holyreq_handler_t handler);
+
+/*
+    holyhttp_set_common_render_args - set common args for render
+    @separator: separate common args with this
+    @fmt: format as printf
+    @...: like printf
+
+    When req->send_frender/send_srender, these args are included automaticly.
+*/
+void holyhttp_set_common_render_args(char *separator, char *fmt, ...);
 
 #endif //HOLYHTTP_H

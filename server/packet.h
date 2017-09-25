@@ -6,6 +6,7 @@
 
 #define MAX_METHOD_LEN          10
 #define MAX_URI_LEN             250
+#define MAX_PATH_LEN            250
 #define MAX_FIELD_NAME_LEN      50
 #define MAX_FIELD_VALUE_LEN     250
 #define MAX_CONTENT_MAJOR_TYPE_LEN  30
@@ -18,7 +19,8 @@
 typedef struct {
     method_t method;
     char mth_str[MAX_METHOD_LEN + 1];
-    char uri[MAX_URI_LEN + 1];
+    char url[MAX_URI_LEN];
+    char uri[MAX_URI_LEN];// without query string
     version_t version;
     dict_t *fields; // case-insensitive
     dict_t *cookies; // case-sensitive

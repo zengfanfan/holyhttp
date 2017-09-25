@@ -73,7 +73,7 @@ char *strnstr(char *src, char *pattern, u32 slen)
     return (char *)memfind(src, slen, pattern, strlen(pattern));
 }
 
-void str_trim_left(char *s, char *chars)
+void str_trim_left(char *s, char c)
 {
     char *head;
     
@@ -81,14 +81,16 @@ void str_trim_left(char *s, char *chars)
         return;
     }
     
-    for (head = s; *head && strchr(chars, *head); ++head);
+    for (head = s; *head == c; ++head);
 
     if (head != s) {
-        strcpy(s, head);
+        while (*head) *s++ = *head++;
+        *s = 0;
+        //strcpy(s, head);
     }
 }
 
-void str_trim_right(char *s, char *chars)
+void str_trim_right(char *s, char c)
 {
     char *tail;
     
@@ -101,15 +103,15 @@ void str_trim_right(char *s, char *chars)
         return;
     }
     
-    for (; tail >= s && strchr(chars, *tail); --tail);
+    for (; tail >= s && *tail == c; --tail);
 
     tail[1] = 0;
 }
 
-void str_trim(char *s, char *chars)
+void str_trim(char *s, char c)
 {
-    str_trim_left(s, chars);
-    str_trim_right(s, chars);
+    str_trim_left(s, c);
+    str_trim_right(s, c);
 }
 
 void str2lower(char *str)
@@ -275,8 +277,8 @@ void join_path(char *buf, u32 bufsz, char *path1, char *path2)
     }
 
     STR_APPEND(buf, bufsz, "%s", path1);
-    str_trim_right(buf, "/");
+    str_trim_right(buf, '/');
     STR_APPEND(buf, bufsz, "/%s", path2);
-    str_trim_right(buf, "/");
+    str_trim_right(buf, '/');
 }
 

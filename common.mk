@@ -10,10 +10,10 @@ ${TARGET}: ${OBJS} ${SUBOBJS}
 	${LD} -r -o $@ $^
 
 subs:
-	@for i in ${SUBDIRS}; \
-		#${ENTER} ${MYPATH}/$$i;\
-		do make -C $$i PARENT=${MYPATH} || exit $$?;\
-		#${LEAVE} ${MYPATH}/$$i;\
+	@for i in ${SUBDIRS}; do \
+		${ENTER} ${MYPATH}/$$i;\
+		make --no-print-directory -C $$i PARENT=${MYPATH} || exit $$?;\
+		${LEAVE} ${MYPATH}/$$i;\
 	done
 
 clean:

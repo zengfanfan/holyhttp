@@ -27,19 +27,21 @@ a.c.1.value = die
 
 #include "dict.h"
 
-typedef void (*ds_foreach_handler_t)(char *value, void *args);
+typedef void (*ds_foreach_handler_t)(int leaf, void *value, void *args);
 
-typedef struct {
+typedef struct data_subset {
     dict_t children;
     char *value;
 } data_subset_t;
+typedef data_subset_t *data_subset_ptr_t;
 
 typedef struct dataset {
-    int inited;
     data_subset_t sub;
+    int inited;
 
     str_t (*get)(struct dataset *self, char *name);
     int (*set)(struct dataset *self, char *name, char *value);
+    int (*set_batch)(struct dataset *self, char *nvs, char *separator);
     void (*show)(struct dataset *self);
     void (*foreach_by)(struct dataset *self, char *name, ds_foreach_handler_t handler, void *args);
     void (*clear)(struct dataset * sub);

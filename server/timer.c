@@ -5,7 +5,7 @@
 
 typedef struct {
     rb_node_t link;
-    u32 interval; // us
+    u64 interval; // us
     u64 expiry;
     int oneshot;
     timer_handler_t handler;
@@ -108,10 +108,11 @@ void explode_timers(void)
 {
     rb_node_t *node;
     holytimer_t *t;
+    u64 now = get_now_us();
 
     for (node = rb_first(&timers); node; node = rb_first(&timers)) {
         t = rb_entry(node, holytimer_t, link);
-        if (t->expiry > get_now_us()) {
+        if (t->expiry > now) {
             break;
         }
         
@@ -121,26 +122,26 @@ void explode_timers(void)
         if (t->oneshot) {
             free(t);
         } else {
-            t->expiry = get_now_us() + t->interval;
+            t->expiry = now + t->interval;
             insert_timer(t);
         }
     }
 }
 
-int get_min_timeout(void)
+i64 get_min_timeout(void)
 {
     u64 now = get_now_us();
     rb_node_t *node = rb_first(&timers);
     holytimer_t *t;
-    int timeout;
+    i64 timeout;
 
     if (!node) {
-        return SECPERYEAR;
+        return SECPERYEAR * 1000LL;
     }
 
     t = rb_entry(node, holytimer_t, link);
     timeout = t->expiry - now;
-    timeout /= 1000 * 1000; // us -> s
-    return MAX(timeout, 1);
+    timeout /= 1000; // us -> ms
+    return MAX(timeout, 1000);
 }
 
