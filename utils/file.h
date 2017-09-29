@@ -28,6 +28,6 @@ int fetch_file(char *filename, void **data, u32 *len);
  */
 int get_file(char *filename, void **data, u32 *len);
 
-char *guest_mime_type(char *filename);
+char *guess_mime_type(char *filename);
 
 #endif // HOLYHTTP_FILE_H

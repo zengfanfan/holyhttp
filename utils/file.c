@@ -93,7 +93,7 @@ int get_file(char *filename, void **data, u32 *len)
     return 1;
 }
 
-char *guest_mime_type(char *filename)
+char *guess_mime_type(char *filename)
 {
     char *fname = filename ? strdup(filename) : NULL;
     char *type;

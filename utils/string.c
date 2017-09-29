@@ -264,21 +264,76 @@ void str_append(char **s, char *d)
     *s = new;
 }
 
-void join_path(char *buf, u32 bufsz, char *path1, char *path2)
+char *join_path(char *buf, u32 bufsz, char *path1, char *path2)
 {
     if (!buf || !bufsz || !path2) {
-        return;
+        return NULL;
     }
 
     buf[0] = 0;
     if (!path1 || path2[0] == '/') {
         STR_APPEND(buf, bufsz, path2);
-        return;
+        return buf;
     }
 
     STR_APPEND(buf, bufsz, "%s", path1);
     str_trim_right(buf, '/');
     STR_APPEND(buf, bufsz, "/%s", path2);
     str_trim_right(buf, '/');
+    return buf;
+}
+
+char *get_real_path(char *path, char *buf, unsigned bufsz)
+{
+    int i = 0, j = 0, plen, blen, is_abs, is_dir;
+    char *item, **array;
+    
+    if (!path || !buf || !bufsz) {
+        FREE_IF_NOT_NULL(path);
+        return NULL;
+    }
+
+    plen = strlen(path);
+    path = strdup(path);
+    array = malloc(plen * sizeof(char *));
+    if (!path || !array) {
+        FREE_IF_NOT_NULL(path);
+        FREE_IF_NOT_NULL(array);
+        return NULL;
+    }
+
+    buf[0] = 0;
+    is_abs = path[0] == '/';
+    is_dir = path[plen-1] == '/';
+
+    foreach_item_in_str(item, path, "/") {
+        if (!strcmp(item, ".")) {
+            // ignore
+        } else if (!strcmp(item, "..")) {
+            if (j > 0) {
+                --j;
+            }
+        } else {
+            array[j++] = item;
+        }
+        ++i;
+    }
+
+    if (is_abs) {
+        STR_APPEND(buf, bufsz, "/");
+    }
+
+    for (i = 0; i < j; ++i) {
+        STR_APPEND(buf, bufsz, "%s/", array[i]);
+    }
+    blen = strlen(buf);
+
+    if (!is_dir && buf[blen-1] == '/' && blen > 1) {
+        buf[blen-1] = 0;
+    }
+    
+    free(path);
+    free(array);
+    return buf;
 }
 

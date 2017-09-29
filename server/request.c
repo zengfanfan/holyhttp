@@ -315,11 +315,10 @@ static int send_file(request_t *self, char *filename)
     }
     
     if (!get_file(filename, &content, &len)) {
-        ERROR();
         return send_status(self, NOT_FOUND);
     }
 
-    ret = response(self, OK, content, len, guest_mime_type(filename),
+    ret = response(self, OK, content, len, guess_mime_type(filename),
                 self->server->cfg.static_file_age, NULL, NULL, NULL);
     free(content);
     return ret;

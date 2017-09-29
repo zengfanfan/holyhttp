@@ -145,14 +145,15 @@ static int accept_connection(server_t *self)
 
 static int handle_static(holyreq_t *req)
 {
-    char path[MAX_PATH_LEN];
+    char path[MAX_PATH_LEN], real[MAX_PATH_LEN];
     char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
     char *static_path = ((request_t *)req)->server->cfg.static_path;
     char *relative_path = req->uri + strlen(static_uri_prefix);
     if (relative_path[0] == '/') {
         ++relative_path;
     }
-    join_path(path, sizeof path, static_path, relative_path);
+    get_real_path(relative_path, real, sizeof real);
+    join_path(path, sizeof path, static_path, real);
     return req->send_file(req, path);
 }
 
