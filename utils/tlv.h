@@ -25,10 +25,10 @@ typedef struct {
 #define TLVINT(tlv) (long)((tlv) ? *(TLV_INT_TYPE *)((tlv)->v) : 0L)
 #define TLVPTR(tlv) (void *)TLVINT(tlv)
 
-tlv_t *new_tlv(tlv_type_t type, u32 len, void *value);
-int tlv_is_equal(tlv_t *a, tlv_t *b);
-u32 tlv_hash(tlv_t *key);
-char *tlv_type2str(tlv_type_t t);
-char *tlv2str(tlv_t *tlv);
+tlv_t *holy_new_tlv(tlv_type_t type, u32 len, void *value);
+int holy_tlv_is_equal(tlv_t *a, tlv_t *b);
+u32 holy_tlv_hash(tlv_t *key);
+char *holy_tlv_type2str(tlv_type_t t);
+char *holy_tlv2str(tlv_t *tlv);
 
 #endif // HOLYHTTP_TLV_H

@@ -11,17 +11,16 @@
 typedef struct request {
     holyreq_t base;
     int inited;
+    int chunked;
     req_pkt_t *pkt;
     server_t *server;
     connection_t *conn;
-    dict_t cookies; // to be set/del, response to client
+    dict_t *cookies; // to be set/del, response to client
     dict_t *headers;
     session_t *session;
-
-    void (*free)(struct request *self);
 } request_t;
 
-int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_code_t *status);
+int holy_request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_code_t *status);
 
 #endif // HOLYHTTP_REQUEST_H
 

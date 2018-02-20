@@ -43,7 +43,7 @@ static void remove_timer(holytimer_t *t)
     rb_erase(&t->link, &timers);
 }
 
-void kill_timer(void *timer)
+void holy_kill_timer(void *timer)
 {
     holytimer_t *p = (holytimer_t *)timer;
     if (p) {
@@ -52,7 +52,7 @@ void kill_timer(void *timer)
     }
 }
 
-void *set_timeout(u32 seconds, timer_handler_t handler, void *arg)
+void *holy_set_timeout(u32 seconds, timer_handler_t handler, void *arg)
 {
     holytimer_t *t = (holytimer_t *)malloc(sizeof *t);
     if (!t) {
@@ -65,13 +65,13 @@ void *set_timeout(u32 seconds, timer_handler_t handler, void *arg)
     t->arg = arg;
     t->oneshot = 1;
     t->interval = seconds * 1000 * 1000;
-    t->expiry = get_now_us() + t->interval;
+    t->expiry = holy_get_now_us() + t->interval;
 
     insert_timer(t);
     return t;
 }
 
-void *set_interval(u32 seconds, timer_handler_t handler, void *arg)
+void *holy_set_interval(u32 seconds, timer_handler_t handler, void *arg)
 {
     holytimer_t *t = (holytimer_t *)malloc(sizeof *t);
     if (!t) {
@@ -84,15 +84,15 @@ void *set_interval(u32 seconds, timer_handler_t handler, void *arg)
     t->arg = arg;
     t->oneshot = 0;
     t->interval = seconds * 1000 * 1000;
-    t->expiry = get_now_us() + t->interval;
+    t->expiry = holy_get_now_us() + t->interval;
 
     insert_timer(t);
     return t;
 }
 
-void show_timers(void)
+void holy_show_timers(void)
 {
-    u64 now = get_now_us();
+    u64 now = holy_get_now_us();
     rb_node_t *node;
     holytimer_t *t;
     int i;
@@ -104,11 +104,11 @@ void show_timers(void)
     }
 }
 
-void explode_timers(void)
+void holy_explode_timers(void)
 {
     rb_node_t *node;
     holytimer_t *t;
-    u64 now = get_now_us();
+    u64 now = holy_get_now_us();
 
     for (node = rb_first(&timers); node; node = rb_first(&timers)) {
         t = rb_entry(node, holytimer_t, link);
@@ -128,9 +128,9 @@ void explode_timers(void)
     }
 }
 
-i64 get_min_timeout(void)
+i64 holy_get_min_timeout(void)
 {
-    u64 now = get_now_us();
+    u64 now = holy_get_now_us();
     rb_node_t *node = rb_first(&timers);
     holytimer_t *t;
     i64 timeout;
@@ -142,6 +142,6 @@ i64 get_min_timeout(void)
     t = rb_entry(node, holytimer_t, link);
     timeout = t->expiry - now;
     timeout /= 1000; // us -> ms
-    return MAX(timeout, 1000);
+    return MAX(timeout, 100);
 }
 

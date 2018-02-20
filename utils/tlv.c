@@ -1,6 +1,6 @@
 #include "tlv.h"
 
-tlv_t *new_tlv(tlv_type_t type, u32 len, void *value)
+tlv_t *holy_new_tlv(tlv_type_t type, u32 len, void *value)
 {
     tlv_t *tlv;
     
@@ -37,7 +37,7 @@ tlv_t *new_tlv(tlv_type_t type, u32 len, void *value)
     return tlv;
 }
 
-int tlv_is_equal(tlv_t *a, tlv_t *b)
+int holy_tlv_is_equal(tlv_t *a, tlv_t *b)
 {
     if (!a || !b) {
         return a == b;
@@ -61,22 +61,22 @@ int tlv_is_equal(tlv_t *a, tlv_t *b)
     }
 }
 
-u32 tlv_hash(tlv_t *key)
+u32 holy_tlv_hash(tlv_t *key)
 {
     switch (key->t) {
     case TLV_INT:
     case TLV_PTR:
         return *(u32 *)(key->v);
     case TLV_STR:
-        return bkdr_hash(key->v);
+        return holy_bkdr_hash(key->v);
     case TLV_BIN:
-        return bkdr_hash_bin(key->v, key->l);
+        return holy_bkdr_hash_bin(key->v, key->l);
     default:
         return 0;
     }
 }
 
-char *tlv_type2str(tlv_type_t t)
+char *holy_tlv_type2str(tlv_type_t t)
 {
     switch (t) {
     case TLV_INT:
@@ -92,7 +92,7 @@ char *tlv_type2str(tlv_type_t t)
     }
 }
 
-char *tlv2str(tlv_t *tlv)
+char *holy_tlv2str(tlv_t *tlv)
 {
     static char buf[1024];
     const u32 size = sizeof buf;
@@ -112,10 +112,10 @@ char *tlv2str(tlv_t *tlv)
         snprintf(buf, size, "%s", TLVSTR(tlv));
         break;
     case TLV_BIN:
-        snprintf(buf, size, "<%p:%d>", tlv->v, tlv->l);
+        snprintf(buf, size, "<%p:%u>", tlv->v, tlv->l);
         break;
     default:
-        snprintf(buf, size, "<%p:%d:%d>", tlv->v, tlv->l, tlv->t);
+        snprintf(buf, size, "<%p:%u:%d>", tlv->v, tlv->l, tlv->t);
         break;
     }
     

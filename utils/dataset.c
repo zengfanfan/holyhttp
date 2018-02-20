@@ -8,7 +8,7 @@ static data_subset_t *new_subset(void)
         return NULL;
     }
     memset(set, 0, sizeof *set);
-    dict_init(&set->children);
+    holy_dict_init(&set->children);
     return set;
 }
 
@@ -124,7 +124,7 @@ static void clear_sub_values(data_subset_t *sub)
     FREE_IF_NOT_NULL(sub->value);
     sub->value = NULL;
     sub->children.foreach(&sub->children, _free_each_child, NULL);
-    dict_init(&sub->children);
+    holy_dict_init(&sub->children);
 }
 
 static void clear_data_set(dataset_t *self)
@@ -147,6 +147,9 @@ static void _show_each_child(tlv_t *key, tlv_t *value, void *args)
 
 static void show_sub_values(data_subset_t *sub, int indent)
 {
+    if (!sub) {
+        return;
+    }
     if (sub->value) {
         PRINT_BLUE(" = %s", sub->value);
     }
@@ -167,6 +170,10 @@ static void _handle_each_value(tlv_t *key, tlv_t *value, void *args)
     ds_foreach_handler_t handler = (ds_foreach_handler_t)(params[0]);
     void *arg = params[1];
     data_subset_t *sub = TLVPTR(value);
+
+    if (!sub) {
+        return;
+    }
     
     if (sub->value) {
         handler(1, sub->value, arg);
@@ -188,7 +195,7 @@ static void foreach_by_name(dataset_t *self, char *name,
     sub->children.foreach(&sub->children, _handle_each_value, params);
 }
 
-int dataset_init(dataset_t *self)
+int holy_dataset_init(dataset_t *self)
 {
     if (!self) {
         return 0;
@@ -199,7 +206,7 @@ int dataset_init(dataset_t *self)
     }
 
     memset(self, 0, sizeof *self);
-    dict_init(&self->sub.children);
+    holy_dict_init(&self->sub.children);
 
     self->get = get_value;
     self->set = set_value;

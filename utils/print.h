@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <string.h>
 #include <holyhttp.h>
+#include "types.h"
+#include "time.h"
 
 typedef enum {
     B_BLACK = 40,
@@ -47,22 +49,32 @@ typedef enum {
 extern holy_dbg_lvl_t holydebug;
 
 #define __LINE_FMT(fmt) "%04d %-10.10s: " fmt "\n", __LINE__, __func__
+#define __PRINT_DATETIME {\
+    struct tm LINE_VAR(now);\
+    time_t LINE_VAR(t) = time(NULL);\
+    localtime_r(&LINE_VAR(t), &LINE_VAR(now));\
+    PRINT_NORMAL("[%02d%02d %02d:%02d:%02d] ",\
+        LINE_VAR(now).tm_mon + 1, LINE_VAR(now).tm_mday,\
+        LINE_VAR(now).tm_hour, LINE_VAR(now).tm_min, LINE_VAR(now).tm_sec);\
+}
 
+#define TRACE(fmt, args...) \
+    __PRINT_DATETIME;PRINT_YELLOW(__LINE_FMT(fmt), ##args)
 #define DEBUG(fmt, args...) \
     if (holydebug >= HOLY_DBG_DEBUG) \
-    PRINT_CYAN(__LINE_FMT(fmt), ##args)
+    {__PRINT_DATETIME;PRINT_CYAN(__LINE_FMT(fmt), ##args);}
 #define INFO(fmt, args...) \
     if (holydebug >= HOLY_DBG_DETAIL) \
-    PRINT_WHITE(__LINE_FMT(fmt), ##args)
+    {__PRINT_DATETIME;PRINT_WHITE(__LINE_FMT(fmt), ##args);}
 #define WARN(fmt, args...) \
     if (holydebug >= HOLY_DBG_WARN) \
-    PRINT_YELLOW(__LINE_FMT(fmt), ##args)
+    {__PRINT_DATETIME;PRINT_YELLOW(__LINE_FMT(fmt), ##args);}
 #define ERROR(fmt, args...) \
     if (holydebug >= HOLY_DBG_ERROR) \
-    PRINT_RED(__LINE_FMT(fmt), ##args)
+    {__PRINT_DATETIME;PRINT_RED(__LINE_FMT(fmt), ##args);}
 #define FATAL(fmt, args...) \
     if (holydebug >= HOLY_DBG_FATAL) \
-    PRINT_HOLY_RED(__LINE_FMT(fmt), ##args)
+    {__PRINT_DATETIME;PRINT_HOLY_RED(__LINE_FMT(fmt), ##args);}
 
 #define ERROR_NO(fmt, args...) \
     ERROR("Failed(%d) to " fmt ", %s.", errno, ##args, strerror(errno))

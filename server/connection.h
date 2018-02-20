@@ -19,6 +19,8 @@ typedef struct connection {
     u16 port;
     server_t *server;
     long last_active;
+    u16 refer;
+    u16 try_close;
     void *timer;
 
     u32 send_buf_len;
@@ -34,7 +36,7 @@ typedef struct connection {
 
 typedef int (*data_handler_t)(struct connection *conn, void *data, u32 len);
 
-connection_t *new_connection(server_t *server, int fd, u32 ip, u16 port);
+connection_t *holy_new_conn(server_t *server, int fd, u32 ip, u16 port);
 
 #endif // HOLYHTTP_CONNECTION_H
 

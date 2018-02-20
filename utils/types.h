@@ -1,8 +1,11 @@
 #ifndef HOLYHTTP_TYPES_H
 #define HOLYHTTP_TYPES_H
 
+typedef char i8;
 typedef unsigned char uchar, u8;
+typedef short i16;
 typedef unsigned short ushort, u16;
+typedef int i32;
 typedef unsigned int uint, u32;
 typedef long long llong, i64;
 typedef unsigned long long ullong, u64;

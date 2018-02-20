@@ -102,9 +102,11 @@ static if_op_t if_str2op(char *s)
 
 static int if_elem_true(if_elem_t *self, dataset_t *ds)
 {
-    char *left = srender_by(self->left, ds);
-    char *right = srender_by(self->right, ds);
-    int both_num = str_isdecimal(left) && str_isdecimal(right);
+    char *left = holy_srender_by(self->left, ds);
+    char *right = holy_srender_by(self->right, ds);
+    int left_num = holy_str_isdecimal(left);
+    int right_num = holy_str_isdecimal(right);
+    int both_num = left_num && right_num;
     
     switch (self->op) {
     case IF_OP_EQ:
@@ -179,7 +181,7 @@ static void _render_each_item(int leaf, void *value, void *args)
     
     // render
     tmp = render_normal_elem(fe->body, ds);
-    str_append(presult, tmp);
+    holy_str_append(presult, tmp);
     free(tmp);
 }
 
@@ -199,8 +201,8 @@ static char *render_for_elem(void *elem, dataset_t *ds)
 static char *render_normal_elem(void *elem, dataset_t *ds)
 {
     normal_elem_t *self = (normal_elem_t *)elem;
-    base_elem_t *be;
-    char *result = NULL, *text, *item, *value, *tmp;
+    base_elem_t *be = NULL;
+    char *result = NULL, *text, *item = NULL, *value, *tmp;
     char name[TMPL_NAME_LEN + 1], for_name[TMPL_NAME_LEN + 1], end[2];
     char fmt1[TMPL_FMT_LEN + 1], fmt2[TMPL_FMT_LEN + 1];
     int ret, first_is_var, first = 1;
@@ -209,7 +211,7 @@ static char *render_normal_elem(void *elem, dataset_t *ds)
     if (!list_empty(&self->children)) {
         list_for_each_entry(be, &self->children, link) {
             tmp = be->render(be, ds);
-            str_append(&result, tmp);
+            holy_str_append(&result, tmp);
             FREE_IF_NOT_NULL(tmp);
         }
         return result;
@@ -226,7 +228,7 @@ static char *render_normal_elem(void *elem, dataset_t *ds)
         foreach_item_in_str(item, text, "@") {
             if (first && !first_is_var) {
                 first = 0;
-                str_append(&result, item);
+                holy_str_append(&result, item);
                 continue;
             }
             
@@ -247,15 +249,15 @@ static char *render_normal_elem(void *elem, dataset_t *ds)
                 }
 
                 if (value) {
-                    str_append(&result, value);
-                    str_append(&result, item + nlen);
+                    holy_str_append(&result, value);
+                    holy_str_append(&result, item + nlen);
                     continue;
                 }
             }
 
             // unmatched
-            str_append(&result, "@");
-            str_append(&result, item);
+            holy_str_append(&result, "@");
+            holy_str_append(&result, item);
         }
         
         free(text);
@@ -328,9 +330,9 @@ static int parse_if_elem(char *text, u32 len, char **pnext, if_elem_t **pelem)
     
     snprintf(fmt1, sizeof fmt1, "\n%.*s#end\r\n", indent_len, indent);
     snprintf(fmt2, sizeof fmt2, "\n%.*s#end\n", indent_len, indent);
-    if ((end = strnstr(ptrue, fmt1, text + len - ptrue))) {
+    if ((end = holy_strnstr(ptrue, fmt1, text + len - ptrue))) {
         tmp = end + strlen(fmt1);
-    } else if ((end = strnstr(ptrue, fmt2, text + len - ptrue))) {
+    } else if ((end = holy_strnstr(ptrue, fmt2, text + len - ptrue))) {
         tmp = end + strlen(fmt2);
     } else {
         return 0;
@@ -340,7 +342,7 @@ static int parse_if_elem(char *text, u32 len, char **pnext, if_elem_t **pelem)
     // "#else:"
 
     snprintf(fmt1, sizeof fmt1, "\n%.*s#else:", indent_len, indent);
-    pfalse = strnstr(ptrue, fmt1, end - ptrue);
+    pfalse = holy_strnstr(ptrue, fmt1, end - ptrue);
     if (pfalse) {
         tlen = pfalse - ptrue + 1;
         pfalse += strlen(fmt1);
@@ -405,9 +407,9 @@ static int parse_for_elem(char *text, u32 len, char **pnext, for_elem_t **pelem)
     // "#end"
     snprintf(fmt1, sizeof fmt1, "\n%.*s#end\r\n", indent_len, indent);
     snprintf(fmt2, sizeof fmt2, "\n%.*s#end\n", indent_len, indent);
-    if ((end = strnstr(text, fmt1, len))) {
+    if ((end = holy_strnstr(text, fmt1, len))) {
         tmp = end + strlen(fmt1);
-    } else if ((end = strnstr(text, fmt2, len))) {
+    } else if ((end = holy_strnstr(text, fmt2, len))) {
         tmp = end + strlen(fmt2);
     } else {
         return 0;
@@ -532,7 +534,7 @@ static template_t *get_template(char *text)
         return NULL;
     }
 
-    if (!dict_init(&cache)) {
+    if (!holy_dict_init(&cache)) {
         return NULL;
     }
     
@@ -541,7 +543,7 @@ static template_t *get_template(char *text)
         return t;
     }
 
-    if (!parse_normal_elem(text, strlen(text) + 1, &tmp, (normal_elem_t **)&t)) {
+    if (!parse_normal_elem(text, strlen(text), &tmp, (normal_elem_t **)&t)) {
         return NULL;
     }
 
@@ -550,7 +552,7 @@ static template_t *get_template(char *text)
     return t;
 }
 
-char *srender_by(char *s, dataset_t *ds)
+char *holy_srender_by(char *s, dataset_t *ds)
 {
     template_t *root;
     char *result;
@@ -574,7 +576,7 @@ char *srender_by(char *s, dataset_t *ds)
     }
 }
 
-char *frender_by(char *filename, dataset_t *ds)
+char *holy_frender_by(char *filename, dataset_t *ds)
 {
     char *s, *result;
 
@@ -582,18 +584,18 @@ char *frender_by(char *filename, dataset_t *ds)
         return "";
     }
 
-    if (!get_file(filename, (void **)&s, NULL)) {
+    if (!holy_get_file(filename, (void **)&s, NULL)) {
         return "";
     }
 
-    result = srender_by(s, ds);
+    result = holy_srender_by(s, ds);
     free(s);
     return result;
 }
 
 static void args2ds(dataset_t *ds, char *fmt, va_list ap)
 {
-    char *pair, key[50], val[100], values[1024];
+    char *pair = NULL, key[50], val[100], values[1024];
     int ret;
 
     fmt = strdup(fmt);
@@ -601,9 +603,9 @@ static void args2ds(dataset_t *ds, char *fmt, va_list ap)
         return;
     }
     
-    dataset_init(ds);
+    holy_dataset_init(ds);
 
-    replace_char(fmt, ',', 1);
+    holy_replace_char(fmt, ',', 1);
     vsnprintf(values, sizeof values, fmt, ap);
 
     // fmt = "key=val,xxx=xxx"
@@ -618,7 +620,7 @@ static void args2ds(dataset_t *ds, char *fmt, va_list ap)
     free(fmt);
 }
 
-char *vsrender(char *s, char *fmt, va_list ap)
+char *holy_vsrender(char *s, char *fmt, va_list ap)
 {
     dataset_t ds = {.inited=0};
 
@@ -628,10 +630,10 @@ char *vsrender(char *s, char *fmt, va_list ap)
 
     args2ds(&ds, fmt, ap);
 
-    return srender_by(s, &ds);
+    return holy_srender_by(s, &ds);
 }
 
-char *srender(char *s, char *fmt, ...)
+char *holy_srender(char *s, char *fmt, ...)
 {
     va_list ap;
     char *ret;
@@ -641,12 +643,12 @@ char *srender(char *s, char *fmt, ...)
     }
 
     va_start(ap, fmt);
-    ret = vsrender(s, fmt, ap);
+    ret = holy_vsrender(s, fmt, ap);
     va_end(ap);
     return ret;
 }
 
-char *vfrender(char *f, char *fmt, va_list ap)
+char *holy_vfrender(char *f, char *fmt, va_list ap)
 {
     dataset_t ds = {.inited=0};
 
@@ -656,10 +658,10 @@ char *vfrender(char *f, char *fmt, va_list ap)
 
     args2ds(&ds, fmt, ap);
 
-    return frender_by(f, &ds);
+    return holy_frender_by(f, &ds);
 }
 
-char *frender(char *f, char *fmt, ...)
+char *holy_frender(char *f, char *fmt, ...)
 {
     va_list ap;
     char *ret;
@@ -669,7 +671,7 @@ char *frender(char *f, char *fmt, ...)
     }
 
     va_start(ap, fmt);
-    ret = vfrender(f, fmt, ap);
+    ret = holy_vfrender(f, fmt, ap);
     va_end(ap);
     return ret;
 }

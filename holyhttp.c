@@ -43,7 +43,7 @@ int holyhttp_init(holycfg_t *cfg)
 
     set_fd_limit();
 
-    if (!server_init(&holyserver, cfg)) {
+    if (!holy_server_init(&holyserver, cfg)) {
         FATAL("Failed to init server.");
         return 0;
     }

@@ -5,7 +5,7 @@
 
 static dict_t cache = {.inited=0};
 
-int fetch_file(char *filename, void **data, u32 *len)
+int holy_fetch_file(char *filename, void **data, u32 *len)
 {
 	FILE *fp;
 	struct stat st;
@@ -54,7 +54,7 @@ int fetch_file(char *filename, void **data, u32 *len)
     return 1;
 }
 
-int get_file(char *filename, void **data, u32 *len)
+int holy_get_file(char *filename, void **data, u32 *len)
 {
     u32 l;
     void *tmp;
@@ -63,7 +63,7 @@ int get_file(char *filename, void **data, u32 *len)
         return 0;
     }
 
-    if (!dict_init(&cache)) {
+    if (!holy_dict_init(&cache)) {
         return 0;
     }
 
@@ -72,28 +72,30 @@ int get_file(char *filename, void **data, u32 *len)
     }
 
     if (cache.get_sb(&cache, filename, &tmp, len)) {
-        *data = memdup(tmp, *len);// they're gonna free us outside!
+        *data = malloc(*len + 1);// they're gonna free us outside!
         if (!*data) {
             MEMFAIL();
             return 0;
         }
+        memcpy(*data, tmp, *len);
+        ((char *)(*data))[*len] = 0;
         return 1;
     }
 
-    if (!fetch_file(filename, data, len)) {
+    if (!holy_fetch_file(filename, data, len)) {
         return 0;
     }
 
-    if (*len > MAX_FILE_CACHE_SIZE) {
+    if (*len > MAX_CACHED_FILE_SIZE) {
         return 1;
     }
 
-    cache.set_sb(&cache, filename, *data, *len + 1);
+    cache.set_sb(&cache, filename, *data, *len);
 
     return 1;
 }
 
-char *guess_mime_type(char *filename)
+char *holy_guess_mime_type(char *filename)
 {
     char *fname = filename ? strdup(filename) : NULL;
     char *type;
@@ -102,36 +104,36 @@ char *guess_mime_type(char *filename)
         return NULL;
     }
 
-    str2lower(fname);
+    holy_str2lower(fname);
     
-    if (str_ends_with(fname, ".html")
-            || str_ends_with(fname, ".htm")) {
+    if (holy_str_ends_with(fname, ".html")
+            || holy_str_ends_with(fname, ".htm")) {
         type = "text/html";
-    } else if (str_ends_with(fname, ".css")) {
+    } else if (holy_str_ends_with(fname, ".css")) {
         type = "text/css";
-    } else if (str_ends_with(fname, ".js")) {
+    } else if (holy_str_ends_with(fname, ".js")) {
         type = "application/x-javascript";
-    } else if (str_ends_with(fname, ".txt")
-            || str_ends_with(fname, ".text")
-            || str_ends_with(fname, ".log")) {
+    } else if (holy_str_ends_with(fname, ".txt")
+            || holy_str_ends_with(fname, ".text")
+            || holy_str_ends_with(fname, ".log")) {
         type = "text";
-    } else if (str_ends_with(fname, ".ico")) {
+    } else if (holy_str_ends_with(fname, ".ico")) {
         type = "image/x-icon";
-    } else if (str_ends_with(fname, ".gif")) {
+    } else if (holy_str_ends_with(fname, ".gif")) {
         type = "image/gif";
-    } else if (str_ends_with(fname, ".jpg")
-            || str_ends_with(fname, ".jpeg")) {
+    } else if (holy_str_ends_with(fname, ".jpg")
+            || holy_str_ends_with(fname, ".jpeg")) {
         type = "image/jpeg";
-    } else if (str_ends_with(fname, ".pdf")) {
+    } else if (holy_str_ends_with(fname, ".pdf")) {
         type = "application/pdf";
-    } else if (str_ends_with(fname, ".swf")) {
+    } else if (holy_str_ends_with(fname, ".swf")) {
         type = "application/x-shockwave-flash";
-    } else if (str_ends_with(fname, ".svg")) {
+    } else if (holy_str_ends_with(fname, ".svg")) {
         type = "image/svg+xml";
-    } else if (str_ends_with(fname, ".tiff")
-            || str_ends_with(fname, ".tif")) {
+    } else if (holy_str_ends_with(fname, ".tiff")
+            || holy_str_ends_with(fname, ".tif")) {
         type = "mage/tiff";
-    } else if (str_ends_with(fname, ".swf")) {
+    } else if (holy_str_ends_with(fname, ".swf")) {
         type = "application/x-shockwave-flash";
     } else {
         type = "application/octet-stream";

@@ -9,9 +9,9 @@
 #define GMT_TIME_STR_LEN    30//Sat, 12 Aug 2017 16:28:26 GMT
 #define SECPERYEAR (3600 * 24 * 366)
 
-u64 get_now_us();
-char *gmtimestr(time_t t);
-time_t gmtimeint(char *s);
-long get_sys_uptime();
+u64 holy_get_now_us();
+char *holy_gmtimestr(time_t t);
+time_t holy_gmtimeint(char *s);
+long holy_get_sys_uptime();
 
 #endif // HOLYHTTP_TIME_H

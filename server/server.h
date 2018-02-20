@@ -9,6 +9,7 @@
 #define SERVER_NAME     "HolyHttp"
 #define SERVER_VERSION  "0.1"
 
+#define MAX_PATH_LEN    250
 #define ARGS_BUF_LEN    (10*1024)
 
 typedef struct server_s {
@@ -36,9 +37,9 @@ typedef struct server_s {
 
 extern server_t holyserver;
 
-int epoll_add_fd(int epfd, int fd, int read);
-int epoll_mdf_fd(int epfd, int fd, int read);
-int epoll_del_fd(int epfd, int fd, int read);
-int server_init(server_t *self, holycfg_t *cfg);
+int holy_epoll_add_fd(int epfd, int fd, int read);
+int holy_epoll_mdf_fd(int epfd, int fd, int read);
+int holy_epoll_del_fd(int epfd, int fd, int read);
+int holy_server_init(server_t *self, holycfg_t *cfg);
 
 #endif // HOLYHTTP_SERVER_H

@@ -15,7 +15,7 @@ static char *get_header(request_t *self, char *name)
         FREE_IF_NOT_NULL(name);
         return NULL;
     }
-    str2lower(name);
+    holy_str2lower(name);
     ret = self->headers->get_ss(self->headers, name);
     FREE_IF_NOT_NULL(name);
     return ret;
@@ -40,7 +40,7 @@ static int set_cookie(request_t *self, char *name, char *value, int age)
     if (age >= 0) {
         STR_APPEND(cookie, size, " Max-Age=%d;", age);
     }
-    return self->cookies.set_ss(&self->cookies, name, cookie);
+    return self->cookies->set_ss(self->cookies, name, cookie);
 }
 
 static int del_cookie(request_t *self, char *name)
@@ -58,7 +58,7 @@ static void cookie2str(tlv_t *key, tlv_t *value, void *args)
 static void cookies_to_str(request_t *self, char *buf, u32 len)
 {
     void *args[] = {buf, &len};
-    self->cookies.foreach(&self->cookies, cookie2str, args);
+    self->cookies->foreach(self->cookies, cookie2str, args);
 }
 
 static char *get_arg(request_t *self, char *name)
@@ -101,27 +101,27 @@ static void gen_session_id(request_t *self, char *id, u32 size)
     snprintf(upi, sizeof upi, "%s%u%u", ua ? ua : "", self->base.port, self->base.ip);
     
     id[0] = 0;
-    STR_APPEND(id, size, uint_to_s64(get_now_us()));
-    STR_APPEND(id, size, uint_to_s64(getpid()));
-    STR_APPEND(id, size, uint_to_s64(bkdr_hash(upi)));
+    STR_APPEND(id, size, holy_uint_to_s64(holy_get_now_us()));
+    STR_APPEND(id, size, holy_uint_to_s64(getpid()));
+    STR_APPEND(id, size, holy_uint_to_s64(holy_bkdr_hash(upi)));
 }
 
 static void check_session_timeout(void *args)
 {
     session_t *ss = args;
-    long now = get_sys_uptime();
+    long now = holy_get_sys_uptime();
     long interval = now - ss->last_req;
 
     if (interval < ss->timeout) {
-        set_timeout(ss->timeout - interval, check_session_timeout, args);
+        holy_set_timeout(ss->timeout - interval, check_session_timeout, args);
         return;
     }
     // timeout
     if (ss->refer > 0) {
         ss->dict->clear(ss->dict);
-        set_timeout(1, check_session_timeout, args);//try it later
+        holy_set_timeout(1, check_session_timeout, args);//try it later
     } else {
-        free_dict(ss->dict);
+        holy_free_dict(ss->dict);
         ss->parent->del_s(ss->parent, ss->id);
     }
 }
@@ -149,7 +149,7 @@ static int get_or_new_session(request_t *self)
 _new:
     gen_session_id(self, ss.id, sizeof ss.id);
 
-    ss.dict = new_dict();
+    ss.dict = holy_new_dict();
     if (!ss.dict) {
         ERROR("Failed to create dict");
         return 0;
@@ -159,32 +159,31 @@ _new:
     ss.timeout = self->server->cfg.session_timeout;
     
     if (!sessions->set_sb(sessions, ss.id, &ss, sizeof ss)) {
-        free_dict(ss.dict);
+        holy_free_dict(ss.dict);
         return 0;
     }
     
     if (!sessions->get_sb(sessions, ss.id, (void **)&self->session, &len)) {
-        free_dict(ss.dict);
+        holy_free_dict(ss.dict);
         return 0;
     }
     
     if (!set_cookie(self, SESSION_ID_NAME, ss.id, self->server->cfg.static_file_age)) {
-        free_dict(ss.dict);
+        holy_free_dict(ss.dict);
         return 0;
     }
 
-    set_timeout(self->server->cfg.session_timeout, check_session_timeout, self->session);
+    holy_set_timeout(self->server->cfg.session_timeout, check_session_timeout, self->session);
     
     return 1;
 }
 
 static int response(request_t *self, status_code_t code,
-            void *content, u32 len, char *type, int age,
-            char *location, char *encoding,
-            char *filename)
+            void *content, u32 len, char *type, int age, int chunked,
+            char *location, char *encoding, char *filename)
 {
     u32 size;
-    char *rsp, *now = gmtimestr(NOW);
+    char *rsp, *now = holy_gmtimestr(NOW);
     int ret;
 
     if (self->base.method == HEAD_METHOD || !content) {
@@ -199,7 +198,7 @@ static int response(request_t *self, status_code_t code,
     }
 
     rsp[0] = 0;
-    STR_APPEND(rsp, size, "HTTP/1.1 %3d %s\r\n", code, strstatus(code));
+    STR_APPEND(rsp, size, "HTTP/1.1 %3d %s\r\n", code, holy_strstatus(code));
     STR_APPEND(rsp, size, "Server: %s/%s\r\nConnection: keep-alive\r\n",
         SERVER_NAME, SERVER_VERSION);
     
@@ -214,7 +213,7 @@ static int response(request_t *self, status_code_t code,
         } else {
             STR_APPEND(rsp, size, "Last-Modified: %s\r\n", self->server->start_time);
         }
-        STR_APPEND(rsp, size, "Expires: %s\r\n", gmtimestr(NOW + age));
+        STR_APPEND(rsp, size, "Expires: %s\r\n", holy_gmtimestr(NOW + age));
     }
 
     if (code == METHOD_NOT_ALLOWED) {
@@ -237,6 +236,25 @@ static int response(request_t *self, status_code_t code,
         STR_APPEND(rsp, size, "Content-Disposition: attachment; filename=\"%s\"\r\n", filename);
     }
 
+    if (chunked) {
+        if (!self->chunked) {
+            self->chunked = 1;
+            STR_APPEND(rsp, size, "Transfer-Encoding: chunked\r\n\r\n%x\r\n", len);
+        } else {
+            snprintf(rsp, size, "%x\r\n", len);
+            if (!len) {
+                self->chunked = 0;// end
+            }
+        }
+
+        size = strlen(rsp);
+        memcpy(rsp + size, content, len);
+        size += len;
+        memcpy(rsp + size, "\r\n", 2);
+        size += 2;
+        goto send;
+    }
+
     STR_APPEND(rsp, size, "Content-Length: %u\r\n\r\n", len);
 
     // fill content
@@ -252,9 +270,10 @@ static int response(request_t *self, status_code_t code,
             IPV4_BIN_TO_STR(self->base.ip), self->base.port, code, location);
     } else {
         INFO("%15s:%-5u << %d %s",
-            IPV4_BIN_TO_STR(self->base.ip), self->base.port, code, strstatus(code));
+            IPV4_BIN_TO_STR(self->base.ip), self->base.port, code, holy_strstatus(code));
     }
 
+send:
     ret = self->conn->write(self->conn, rsp, size);
     free(rsp);
     return ret;
@@ -265,17 +284,17 @@ static int redirect(request_t *self, char *location)
     if (!location) {
         return 0;
     }
-    return response(self, MOVED_TEMPORARILY, NULL, 0, NULL, 0, location, NULL, NULL);
+    return response(self, MOVED_TEMPORARILY, NULL, 0, NULL, 0, 0, location, NULL, NULL);
 }
 
 static int redirect_top(request_t *self, char *location)
 {
-    char content[MAX_URI_LEN * 2];
+    char content[MAX_URL_LEN * 2];
     if (!location) {
         return 0;
     }
     snprintf(content, sizeof content, "<script>top.location.href='%s';</script>", location);
-    return response(self, OK, content, strlen(content), "text/html", 0, NULL, NULL, NULL);
+    return response(self, OK, content, strlen(content), "text/html", 0, 0, NULL, NULL, NULL);
 }
 
 static int redirect_forever(request_t *self, char *location)
@@ -283,7 +302,7 @@ static int redirect_forever(request_t *self, char *location)
     if (!location) {
         return 0;
     }
-    return response(self, MOVED_PERMANENTLY, NULL, 0, NULL, SECPERYEAR, location, NULL, NULL);
+    return response(self, MOVED_PERMANENTLY, NULL, 0, NULL, SECPERYEAR, 0, location, NULL, NULL);
 }
 
 static int send_status(request_t *self, status_code_t code)
@@ -308,18 +327,18 @@ static int send_file(request_t *self, char *filename)
 
     since = self->headers->get_ss(self->headers, "if-modified-since");
     if (since) {
-        since_t = gmtimeint(since);
+        since_t = holy_gmtimeint(since);
         if (since_t >= self->server->start) {
             return send_status(self, NOT_MODIFIED);
         }
     }
     
-    if (!get_file(filename, &content, &len)) {
+    if (!holy_get_file(filename, &content, &len)) {
         return send_status(self, NOT_FOUND);
     }
 
-    ret = response(self, OK, content, len, guess_mime_type(filename),
-                self->server->cfg.static_file_age, NULL, NULL, NULL);
+    ret = response(self, OK, content, len, holy_guess_mime_type(filename),
+                self->server->cfg.static_file_age, 0, NULL, NULL, NULL);
     free(content);
     return ret;
 }
@@ -329,7 +348,7 @@ static int send_html(request_t *self, char *html)
     if (!self || !html) {
         return 0;
     }
-    return response(self, OK, html, strlen(html), "text/html", 0, NULL, NULL, NULL);
+    return response(self, OK, html, strlen(html), "text/html", 0, 0, NULL, NULL, NULL);
 }
 
 static int send_srender_by(request_t *self, char *s, char *args)
@@ -337,11 +356,11 @@ static int send_srender_by(request_t *self, char *s, char *args)
     dataset_t ds = {.inited=0};
     char *res;
 
-    dataset_init(&ds);
+    holy_dataset_init(&ds);
     
     ds.set_batch(&ds, self->server->common_args, self->server->common_separator);
     ds.set_batch(&ds, args, self->base.render_separator);
-    res = srender_by(s, &ds);
+    res = holy_srender_by(s, &ds);
     ds.clear(&ds);
 
     return send_html(self, res);
@@ -361,18 +380,18 @@ static int send_srender(request_t *self, char *s, char *fmt, ...)
 
 static int send_frender_by(request_t *self, char *f, char *args)
 {
-    char abspath[MAX_URI_LEN];
+    char abspath[MAX_URL_LEN];
     dataset_t ds = {.inited=0};
     char *res;
     
-    join_path(abspath, sizeof(abspath), self->server->cfg.template_path, f);
+    holy_join_path(abspath, sizeof(abspath), self->server->cfg.template_path, f);
 
-    dataset_init(&ds);
+    holy_dataset_init(&ds);
     
     ds.set_batch(&ds, self->server->common_args, self->server->common_separator);
     ds.set_batch(&ds, args, self->base.render_separator);
     
-    res = frender_by(abspath, &ds);
+    res = holy_frender_by(abspath, &ds);
     ds.clear(&ds);
 
     return send_html(self, res);
@@ -394,14 +413,29 @@ static void free_request(request_t *self)
 {
     if (self) {
         --self->session->refer;
+        --self->conn->refer;
         FREE_IF_NOT_NULL(self->conn->recv_buf);
         self->conn->recv_buf = NULL;
-        free_req_pkt(self->pkt);
-        self->cookies.clear(&self->cookies);
+        holy_free_req_pkt(self->pkt);
+        if (self->cookies) {
+            holy_free_dict(self->cookies);
+            self->cookies = NULL;
+        }
     }
 }
 
-int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_code_t *status)
+static request_t *clone_request(request_t *self)
+{
+    request_t *ret = malloc(sizeof(request_t));
+    if (!self || !ret) {
+        FREE_IF_NOT_NULL(ret);
+        return NULL;
+    }
+    memcpy(ret, self, sizeof(request_t));
+    return ret;
+}
+
+int holy_request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_code_t *status)
 {
     status_code_t code;
 
@@ -420,9 +454,6 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     memset(self, 0, sizeof *self);
 
     // attributes
-    if (!dict_init(&self->cookies)) {
-        return 0;
-    }
     self->base.ip = conn->ip;
     self->base.port = conn->port;
     self->base.method = pkt->method;
@@ -434,6 +465,11 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->pkt = pkt;
     self->conn = conn;
     self->server = conn->server;
+    self->cookies = holy_new_dict();
+    if (!self->cookies) {
+        ERROR("Failed to create cookie dict");
+        return 0;
+    }
 
     // session
     if (!get_or_new_session(self)) {
@@ -444,7 +480,8 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     }
 
     ++self->session->refer;
-    self->session->last_req = get_sys_uptime();
+    ++self->conn->refer;
+    self->session->last_req = holy_get_sys_uptime();
 
     // methods
     self->base.send_file = (typeof(self->base.send_file))send_file;
@@ -466,7 +503,8 @@ int request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, status_cod
     self->base.send_frender = (typeof(self->base.send_frender))send_frender;
     self->base.send_srender_by = (typeof(self->base.send_srender_by))send_srender_by;
     self->base.send_frender_by = (typeof(self->base.send_frender_by))send_frender_by;
-    self->free = free_request;
+    self->base.free = (typeof(self->base.free))free_request;
+    self->base.clone = (typeof(self->base.clone))clone_request;
 
     self->inited = 1;
 

@@ -5,6 +5,16 @@
 #ifndef HOLYHTTP_H
 #define HOLYHTTP_H
 
+#define MAX_CACHED_FILE_SIZE (1024*1024/10240) // 1M, larger file will not be cached
+#define HOLY_HASH_BITS  8// the bigger, the faster and larger(memory)
+#define MAX_METHOD_LEN              10
+#define MAX_URL_LEN                 250
+#define MAX_FIELD_NAME_LEN          50// http header field, such as "User-agent: "
+#define MAX_FIELD_VALUE_LEN         250
+#define MAX_BOUNDARY_LEN            100
+
+#define MAX_HEADER_LEN  1024
+
 typedef enum {
     HOLY_DBG_FATAL = 1,
     HOLY_DBG_ERROR,
@@ -118,6 +128,9 @@ typedef struct holyreq {
     version_t version;
     char *url, *uri;
     char *render_separator;// default to ","
+     // @incomplete: set to 1 if you dont want req be freed,
+     // and you MUST do it yourself with: req->free(req)
+    char incomplete;
 
     int (*send_file)(struct holyreq *self, char *filename);
     int (*send_html)(struct holyreq *self, char *html);
@@ -135,12 +148,13 @@ typedef struct holyreq {
     char *(*get_arg)(struct holyreq *self, char *name);
     int (*get_bin_arg)(struct holyreq *self, char *name, void **value, unsigned *vlen);
     int (*response)(struct holyreq *self, status_code_t code,
-                    void *content, unsigned len, char *type, int age,
-                    char *location, char *encoding,
-                    char *filename);
+                    void *content, unsigned len, char *type, int age, int chunked,
+                    char *location, char *encoding, char *filename);
     int (*redirect)(struct holyreq *self, char *location);
     int (*redirect_top)(struct holyreq *self, char *location);
     int (*redirect_forever)(struct holyreq *self, char *location);
+    void (*free)(struct holyreq *self);
+    struct holyreq *(*clone)(struct holyreq *self);
 } holyreq_t;
 
 typedef void (*holyreq_handler_t)(holyreq_t *req);

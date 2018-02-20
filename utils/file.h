@@ -2,22 +2,21 @@
 #define HOLYHTTP_FILE_H
 
 #include <time.h>
+#include <holyhttp.h>
 #include "dict.h"
 
-#define MAX_FILE_CACHE_SIZE (1024*1024) // 1M
-
 /*
- * fetch_file - get file content
+ * holy_fetch_file - get file content
  * @filename: full path of file
  * @data: save the pointer of contnet
  * @len: save the length of content
  *
  * return: 1-ok, 0-fail
  */
-int fetch_file(char *filename, void **data, u32 *len);
+int holy_fetch_file(char *filename, void **data, u32 *len);
 
 /*
- * get_file - get file content
+ * holy_get_file - get file content
  * @filename: full path of file
  * @data: save the pointer of contnet
  * @len: save the length of content
@@ -26,8 +25,8 @@ int fetch_file(char *filename, void **data, u32 *len);
  *
  * return: 1-ok, 0-fail
  */
-int get_file(char *filename, void **data, u32 *len);
+int holy_get_file(char *filename, void **data, u32 *len);
 
-char *guess_mime_type(char *filename);
+char *holy_guess_mime_type(char *filename);
 
 #endif // HOLYHTTP_FILE_H

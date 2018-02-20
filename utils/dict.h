@@ -1,11 +1,11 @@
 #ifndef HOLYHTTP_DICT_H
 #define HOLYHTTP_DICT_H
 
+#include <holyhttp.h>
 #include "list.h"
 #include "tlv.h"
 
-#define DICT_HASH_BITS  2
-#define DICT_HASH_SIZE  (1U << DICT_HASH_BITS)
+#define DICT_HASH_SIZE  (1U << HOLY_HASH_BITS)
 
 typedef void (*dict_foreach_handler_t)(tlv_t *key, tlv_t *value, void *args);
 typedef struct dict {
@@ -32,8 +32,8 @@ typedef struct dict {
     void (*show)(struct dict *self);
 } dict_t;
 
-dict_t *new_dict(void);
-void free_dict(dict_t *self);
-int dict_init(dict_t *self);
+dict_t *holy_new_dict(void);
+void holy_free_dict(dict_t *self);
+int holy_dict_init(dict_t *self);
 
 #endif // HOLYHTTP_DICT_H

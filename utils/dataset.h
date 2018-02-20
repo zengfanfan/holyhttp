@@ -47,6 +47,6 @@ typedef struct dataset {
     void (*clear)(struct dataset * sub);
 } dataset_t;
 
-int dataset_init(dataset_t *self);
+int holy_dataset_init(dataset_t *self);
 
 #endif // HOLYHTTP_DATASET_H

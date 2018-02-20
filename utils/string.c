@@ -1,7 +1,7 @@
 #include "print.h"
 #include "string.h"
 
-u32 bkdr_hash_bin(void *bin, u32 len)
+u32 holy_bkdr_hash_bin(void *bin, u32 len)
 {
     u32 hash = 0;
     char *cbin = (char *)bin;
@@ -17,7 +17,7 @@ u32 bkdr_hash_bin(void *bin, u32 len)
     return hash;
 }
 
-u32 bkdr_hash(char *str)
+u32 holy_bkdr_hash(char *str)
 {
     u32 hash = 0;
     
@@ -32,24 +32,25 @@ u32 bkdr_hash(char *str)
     return hash;
 }
 
-void *memfind(void *src, u32 slen, void *pattern, u32 plen)
+void *holy_memfind(void *src, u32 slen, void *pattern, u32 plen)
 {
     int i;
+    u8 *pos = src;
     
     if (!src || !pattern || !slen || !plen || slen < plen) {
         return NULL;
     }
 
-    for (i = 0; plen <= (slen - i); ++src, ++i) {
-        if (!memcmp(src, pattern, plen)) {
-            return src;
+    for (i = 0; plen <= (slen - i); ++pos, ++i) {
+        if (!memcmp(pos, pattern, plen)) {
+            return pos;
         }
     }
     
     return NULL;
 }
 
-void *memdup(void *src, u32 len)
+void *holy_memdup(void *src, u32 len)
 {
     void *tmp;
     
@@ -65,15 +66,15 @@ void *memdup(void *src, u32 len)
     return tmp;
 }
 
-char *strnstr(char *src, char *pattern, u32 slen)
+char *holy_strnstr(char *src, char *pattern, u32 slen)
 {
     if (!src || !pattern || !slen) {
         return NULL;
     }
-    return (char *)memfind(src, slen, pattern, strlen(pattern));
+    return (char *)holy_memfind(src, slen, pattern, strlen(pattern));
 }
 
-void str_trim_left(char *s, char c)
+void holy_str_trim_left(char *s, char c)
 {
     char *head;
     
@@ -90,7 +91,7 @@ void str_trim_left(char *s, char c)
     }
 }
 
-void str_trim_right(char *s, char c)
+void holy_str_trim_right(char *s, char c)
 {
     char *tail;
     
@@ -108,13 +109,13 @@ void str_trim_right(char *s, char c)
     tail[1] = 0;
 }
 
-void str_trim(char *s, char c)
+void holy_str_trim(char *s, char c)
 {
-    str_trim_left(s, c);
-    str_trim_right(s, c);
+    holy_str_trim_left(s, c);
+    holy_str_trim_right(s, c);
 }
 
-void str2lower(char *str)
+void holy_str2lower(char *str)
 {
     if (!str) {
         return;
@@ -128,7 +129,7 @@ void str2lower(char *str)
     }
 }
 
-void str2upper(char *str)
+void holy_str2upper(char *str)
 {
     if (!str) {
         return;
@@ -142,7 +143,7 @@ void str2upper(char *str)
     }
 }
 
-int str_isdecimal(char *str)
+int holy_str_isdecimal(char *str)
 {
     int dot = 0;
     if (!str || !str[0]) {
@@ -173,7 +174,7 @@ int str_isdecimal(char *str)
     return 1;
 }
 
-void replace_char(char *str, char old_char, char new_char)
+void holy_replace_char(char *str, char old_char, char new_char)
 {
     if (!str) {
         return;
@@ -187,7 +188,7 @@ void replace_char(char *str, char old_char, char new_char)
     }
 }
 
-int str_starts_with(char *str, char *prefix)
+int holy_str_starts_with(char *str, char *prefix)
 {
     if (!str || !prefix) {
         return 0;
@@ -195,7 +196,7 @@ int str_starts_with(char *str, char *prefix)
     return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
-int str_ends_with(char *str, char *prefix)
+int holy_str_ends_with(char *str, char *prefix)
 {
     u32 slen, plen;
     char *s, *p;
@@ -223,7 +224,7 @@ int str_ends_with(char *str, char *prefix)
 
 const char * const s64 = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890+-";
 
-char *uint_to_s64(u64 n)
+char *holy_uint_to_s64(u64 n)
 {
     static char result[32];
     u32 size = sizeof result;
@@ -236,7 +237,7 @@ char *uint_to_s64(u64 n)
     return result;
 }
 
-void str_append(char **s, char *d)
+void holy_str_append(char **s, char *d)
 {
     u32 len;
     char *new;
@@ -264,7 +265,7 @@ void str_append(char **s, char *d)
     *s = new;
 }
 
-char *join_path(char *buf, u32 bufsz, char *path1, char *path2)
+char *holy_join_path(char *buf, u32 bufsz, char *path1, char *path2)
 {
     if (!buf || !bufsz || !path2) {
         return NULL;
@@ -277,13 +278,13 @@ char *join_path(char *buf, u32 bufsz, char *path1, char *path2)
     }
 
     STR_APPEND(buf, bufsz, "%s", path1);
-    str_trim_right(buf, '/');
+    holy_str_trim_right(buf, '/');
     STR_APPEND(buf, bufsz, "/%s", path2);
-    str_trim_right(buf, '/');
+    holy_str_trim_right(buf, '/');
     return buf;
 }
 
-char *get_real_path(char *path, char *buf, unsigned bufsz)
+char *holy_get_real_path(char *path, char *buf, unsigned bufsz)
 {
     int i = 0, j = 0, plen, blen, is_abs, is_dir;
     char *item, **array;

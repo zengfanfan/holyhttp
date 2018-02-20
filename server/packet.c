@@ -2,7 +2,7 @@
 #include <utils/string.h>
 #include "packet.h"
 
-char *strstatus(status_code_t code)
+char *holy_strstatus(status_code_t code)
 {
     switch (code) {
     case CONTINUE:
@@ -164,25 +164,6 @@ static void url_decode(char *url)
     url[j] = 0;
 }
 
-void url_encode(char *url, char *buf, unsigned len)
-{
-    int i, j;
-    int qlen = strlen(url);
-    char hex[3];
-    
-    for (i = j = 0; i < qlen && j < len-1; ++i, ++j) {
-        if (!isalnum(url[i])) {
-            snprintf(hex, sizeof hex, "%0x2hh", url[i]);
-            strcpy(&buf[j], hex);
-            j += 2;
-        } else {
-            buf[j] = url[i];
-        }
-    }
-
-    buf[j] = 0;
-}
-
 static int parse_method(req_pkt_t *self, char *method, status_code_t *status)
 {
     if (!strcmp(method, "HEAD")) {
@@ -203,11 +184,11 @@ static int parse_method(req_pkt_t *self, char *method, status_code_t *status)
 static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status)
 {
     int ret;
-    char fmt[MAX_URI_LEN];
+    char fmt[MAX_URL_LEN];
     u32 major_ver, sub_ver;
 
     // GET /uri?query=1&key=value HTTP/1.1\r\n
-    snprintf(fmt, sizeof fmt, "%%%ds %%%ds HTTP/%%u.%%u\r\n", MAX_METHOD_LEN, MAX_URI_LEN);
+    snprintf(fmt, sizeof fmt, "%%%ds %%%ds HTTP/%%u.%%u\r\n", MAX_METHOD_LEN, MAX_URL_LEN);
     ret = sscanf((char *)data, fmt, self->mth_str, self->url, &major_ver, &sub_ver);
     if (ret != 4) {
         *status = BAD_REQUEST;
@@ -218,7 +199,7 @@ static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status
         return 0;
     }
 
-    if (strlen(self->url) >= MAX_URI_LEN) {
+    if (strlen(self->url) >= MAX_URL_LEN) {
         *status = REQUEST_URI_TOO_LONG;
         return 0;
     }
@@ -240,7 +221,7 @@ static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status
 
 static int parse_query(req_pkt_t *self, char *query, status_code_t *status)
 {
-    char *name, *value, *tmp, *pair;
+    char *name, *value, *tmp, *pair = NULL;
     char empty[] = "";
 
     // name=value&name=value
@@ -266,9 +247,9 @@ static int parse_query(req_pkt_t *self, char *query, status_code_t *status)
 static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, char **content)
 {
     int ret;
-    char fmt[MAX_URI_LEN];
+    char fmt[MAX_URL_LEN];
     char name[MAX_FIELD_NAME_LEN + 1], value[MAX_FIELD_VALUE_LEN + 1];
-    char *fields_start, *fields_end, *fields, *line, *tmp;
+    char *fields_start, *fields_end, *fields, *line = NULL, *tmp;
     int fields_len;
 
     fields_start = strstr(data, "\r\n");
@@ -303,7 +284,7 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
         if (ret != 2) {
             continue;
         }
-        str2lower(name);
+        holy_str2lower(name);
         self->fields->set_ss(self->fields, name, value);
     }
     
@@ -336,7 +317,7 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
 static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
 {
     int ret;
-    char fmt[MAX_URI_LEN];
+    char fmt[MAX_URL_LEN];
     char boundary[MAX_BOUNDARY_LEN + 1];
     char delimiter[MAX_BOUNDARY_LEN * 2 + 1];
     char *start = content, *end = content + self->content_length - 1;
@@ -388,41 +369,39 @@ static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
 
     // the first boundary
     ret = snprintf(delimiter, sizeof delimiter, "--%s\r\n", boundary);
-    if (!str_starts_with(start, delimiter)) {
+    if (!holy_str_starts_with(start, delimiter)) {
         *status = BAD_REQUEST;
         return 0;
     }
     start += ret;
 
     // the split boundary
-    ret = snprintf(delimiter, sizeof delimiter, "\r\n--%s\r\n", boundary);
-    for (pos = start; pos < end; pos = next) {
-        next = strnstr(pos, delimiter, end - pos + 1);
+    snprintf(delimiter, sizeof delimiter, "\r\n--%s\r\n", boundary);
+    len = strlen(delimiter);
+    for (pos = start; pos < end; pos = next + len) {
+        next = holy_strnstr(pos, delimiter, end - pos + 1);
         if (!next) {
             next = end + 1;
         }
         
         // [now part is from pos to next]
         // content-disposition: form-data; name="xxxxx"\r\n\r\n<...data...>
-        do {
-            pos = strnstr(pos, "name=\"", next - pos);
-            if (!pos || pos >= next) {
-                break;
-            }
-        } while (isalnum(pos[-1]));
-        if (!pos) {
+        for (pos = holy_strnstr(pos, "name=\"", next - pos);
+            (pos && pos < next) && isalnum(pos[-1]);
+            pos = holy_strnstr(pos, "name=\"", next - pos));
+        if (!(pos && pos < next)) {
             ERROR("Name not found in form-data");
             continue;
         }
         
-        snprintf(fmt, sizeof fmt, "name=\"%%%ds\"", MAX_FIELD_NAME_LEN);
+        snprintf(fmt, sizeof fmt, "name=\"%%%d[^\"]", MAX_FIELD_NAME_LEN);
         ret = sscanf(pos, fmt, name);
         if (ret != 1) {
             ERROR("Name not found in form-data");
             continue;
         }
 
-        pos = strnstr(pos, "\r\n\r\n", next - pos);
+        pos = holy_strnstr(pos, "\r\n\r\n", next - pos);
         if (!pos) {
             ERROR("Data not found in form-data");
             continue;
@@ -439,7 +418,7 @@ static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
 static int parse_cookies(req_pkt_t *self, status_code_t *status)
 {
     int ret;
-    char fmt[MAX_URI_LEN], *pair;
+    char fmt[MAX_URL_LEN], *pair = NULL;
     char name[MAX_FIELD_NAME_LEN + 1], value[MAX_FIELD_VALUE_LEN + 1];
     char *cookies = self->fields->get_ss(self->fields, "cookie");
 
@@ -458,7 +437,7 @@ static int parse_cookies(req_pkt_t *self, status_code_t *status)
         if (ret != 1 && ret != 2) {
             continue;
         }
-        str_trim(name, ' ');
+        holy_str_trim(name, ' ');
         self->cookies->set_ss(self->cookies, name, value);
     }
 
@@ -466,7 +445,7 @@ static int parse_cookies(req_pkt_t *self, status_code_t *status)
     return 1;
 }
 
-req_pkt_t *new_req_pkt(char *data, u32 len, status_code_t *status)
+req_pkt_t *holy_new_req_pkt(char *data, u32 len, status_code_t *status)
 {
     req_pkt_t tmp = {0}, *pkt;
     status_code_t code;
@@ -481,9 +460,9 @@ req_pkt_t *new_req_pkt(char *data, u32 len, status_code_t *status)
         return NULL;
     }
 
-    tmp.args = new_dict();
-    tmp.fields = new_dict();
-    tmp.cookies = new_dict();
+    tmp.args = holy_new_dict();
+    tmp.fields = holy_new_dict();
+    tmp.cookies = holy_new_dict();
     if (!tmp.args || !tmp.fields || !tmp.cookies) {
         *status = INSUFFICIENT_STORAGE;
         goto fail;
@@ -531,18 +510,18 @@ req_pkt_t *new_req_pkt(char *data, u32 len, status_code_t *status)
     return pkt;
 
 fail:
-    free_dict(tmp.args);
-    free_dict(tmp.fields);
-    free_dict(tmp.cookies);
+    holy_free_dict(tmp.args);
+    holy_free_dict(tmp.fields);
+    holy_free_dict(tmp.cookies);
     return NULL;
 }
 
-void free_req_pkt(req_pkt_t *self)
+void holy_free_req_pkt(req_pkt_t *self)
 {
     if (self) {
-        free_dict(self->args);
-        free_dict(self->fields);
-        free_dict(self->cookies);
+        holy_free_dict(self->args);
+        holy_free_dict(self->fields);
+        holy_free_dict(self->cookies);
         free(self);
     }
 }

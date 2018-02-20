@@ -27,10 +27,10 @@ server_t holyserver;
 
 static int server_listen(server_t *self)
 {
-    int reuse = 1, flags = 0;
+    int reuse = 1;
     struct sockaddr_in addr;    
 
-    self->fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    self->fd = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP);
     if (self->fd < 0) {
         FATAL_NO("create socket");
         return 0;
@@ -57,16 +57,10 @@ static int server_listen(server_t *self)
         return 0;
     }
 
-    flags = fcntl(self->fd, F_GETFL, 0);
-    if (fcntl(self->fd, F_SETFL, flags|O_NONBLOCK) < 0) {
-        ERROR_NO("set server socket non-blocking");
-        // fall through
-    }
-    
     return 1;
 }
 
-int epoll_add_fd(int epfd, int fd, int read)
+int holy_epoll_add_fd(int epfd, int fd, int read)
 {
     struct epoll_event evt;
     evt.data.fd = fd;
@@ -80,7 +74,7 @@ int epoll_add_fd(int epfd, int fd, int read)
     }
 }
 
-int epoll_mdf_fd(int epfd, int fd, int read)
+int holy_epoll_mdf_fd(int epfd, int fd, int read)
 {
     struct epoll_event evt;
     evt.data.fd = fd;
@@ -94,7 +88,7 @@ int epoll_mdf_fd(int epfd, int fd, int read)
     }
 }
 
-int epoll_del_fd(int epfd, int fd, int read)
+int holy_epoll_del_fd(int epfd, int fd, int read)
 {
     struct epoll_event evt;
     evt.data.fd = fd;
@@ -111,10 +105,10 @@ int epoll_del_fd(int epfd, int fd, int read)
 static int accept_connection(server_t *self)
 {
     struct sockaddr_in src;
-    int slen = sizeof(src);
+    u32 slen = sizeof(src);
     int fd, flags;
     connection_t *conn;
-    
+
     memset(&src, 0, slen);
 
     fd = accept(self->fd, (struct sockaddr *)&src, (socklen_t *)&slen);
@@ -129,9 +123,9 @@ static int accept_connection(server_t *self)
         // fall through
     }
 
-    epoll_add_fd(self->epfd, fd, 1);
+    holy_epoll_add_fd(self->epfd, fd, 1);
 
-    conn = new_connection(self, fd, (u32)ntohl(src.sin_addr.s_addr), ntohs(src.sin_port));
+    conn = holy_new_conn(self, fd, (u32)ntohl(src.sin_addr.s_addr), ntohs(src.sin_port));
     if (!conn) {
         ERROR("Failed to create connection for fd %d", fd);
         close(fd);
@@ -152,8 +146,8 @@ static int handle_static(holyreq_t *req)
     if (relative_path[0] == '/') {
         ++relative_path;
     }
-    get_real_path(relative_path, real, sizeof real);
-    join_path(path, sizeof path, static_path, real);
+    holy_get_real_path(relative_path, real, sizeof real);
+    holy_join_path(path, sizeof path, static_path, real);
     return req->send_file(req, path);
 }
 
@@ -167,7 +161,7 @@ static int handle_dynamic(holyreq_t *req)
     char *static_uri_prefix = ((request_t *)req)->server->cfg.static_uri_prefix;
 
     if (!strcasecmp(req->uri, "/favicon.ico")) {
-        join_path(path, sizeof path, static_uri_prefix, "favicon.ico");
+        holy_join_path(path, sizeof path, static_uri_prefix, "favicon.ico");
         return req->redirect_forever(req, path);
     }
     
@@ -176,7 +170,7 @@ static int handle_dynamic(holyreq_t *req)
         return req->send_status(req, INSUFFICIENT_STORAGE);
     }
 
-    str_trim(uri, '/');
+    holy_str_trim(uri, '/');
     handler = whiteroutes->get_sp(whiteroutes, uri);
     if (handler) {
         free(uri);
@@ -209,7 +203,7 @@ static int handle_data(connection_t *conn, void *data, u32 len)
     request_t req = {.inited=0};
     int ret;
 
-    pkt = new_req_pkt(data, len, &status);
+    pkt = holy_new_req_pkt(data, len, &status);
     if (!pkt) {
         ERROR("data from %s:%d is malformed!", IPV4_BIN_TO_STR(conn->ip), conn->port);
         conn->send_status(conn, status);
@@ -219,21 +213,25 @@ static int handle_data(connection_t *conn, void *data, u32 len)
     INFO("%15s:%-5u >> %s %s",
         IPV4_BIN_TO_STR(conn->ip), conn->port, pkt->mth_str, pkt->uri);
 
-    if (!request_init(&req, conn, pkt, &status)) {
+    if (!holy_request_init(&req, conn, pkt, &status)) {
         ERROR("Failed(%d) to init request for %s:%d, %s.",
-            status, IPV4_BIN_TO_STR(conn->ip), conn->port, strstatus(status));
+            status, IPV4_BIN_TO_STR(conn->ip), conn->port, holy_strstatus(status));
         conn->send_status(conn, status);
-        free_req_pkt(pkt);
+        holy_free_req_pkt(pkt);
         return 0;
     }
 
-    if (str_starts_with(pkt->uri, conn->server->cfg.static_uri_prefix)) {
+    if (holy_str_starts_with(pkt->uri, conn->server->cfg.static_uri_prefix)) {
         ret = handle_static((holyreq_t *)&req);
     } else {
         ret = handle_dynamic((holyreq_t *)&req);
     }
-    
-    req.free(&req);
+
+    if (req.base.incomplete) {
+        INFO("request is not freed for incomplete");
+    } else {
+        req.base.free((holyreq_t *)&req);
+    }
 
     return ret;
 }
@@ -279,12 +277,12 @@ static int run_server(server_t *self)
     
     self->epfd = epoll_create(EPOLL_EVT_SZ);
     if (self->epfd < 0) {
-        FATAL("Failed(%d) to create epoll, %s.", errno, strerror(errno));
+        FATAL_NO("create epoll");
         close(self->fd);
         return 0;
     }
 
-    if (!epoll_add_fd(self->epfd, self->fd, 1)) {
+    if (!holy_epoll_add_fd(self->epfd, self->fd, 1)) {
         close(self->fd);
         close(self->epfd);
         return 0;
@@ -292,10 +290,10 @@ static int run_server(server_t *self)
     
     memset(evts, 0, sizeof(evts));
     self->start = NOW;
-    strcpy(self->start_time, gmtimestr(self->start));
+    strcpy(self->start_time, holy_gmtimestr(self->start));
 
     for (;;) {
-        timeout = get_min_timeout();
+        timeout = holy_get_min_timeout();
         nfds = epoll_wait(self->epfd, evts, EPOLL_EVT_SZ, timeout);
         if (nfds < 0) {
             ERROR_NO("wait epoll");
@@ -322,7 +320,7 @@ static int run_server(server_t *self)
         }
 
         // handle timers
-        explode_timers();
+        holy_explode_timers();
     }
 
     return 1;
@@ -342,7 +340,7 @@ static int set_route(server_t *self, char *uri, void *handler)
         return 0;
     }
 
-    str_trim(uri_cp, '/');
+    holy_str_trim(uri_cp, '/');
     ret = self->routes->set_sp(self->routes, uri_cp, handler);
     free(uri_cp);
     return ret;
@@ -362,7 +360,7 @@ static int set_whiteroute(server_t *self, char *uri, void *handler)
         return 0;
     }
 
-    str_trim(uri_cp, '/');
+    holy_str_trim(uri_cp, '/');
     ret = self->whiteroutes->set_sp(self->whiteroutes, uri_cp, handler);
     free(uri_cp);
     return ret;
@@ -410,7 +408,7 @@ static int check_n_set_cfg(server_t *self, holycfg_t *cfg)
     return 1;
 }
 
-int server_init(server_t *self, holycfg_t *cfg)
+int holy_server_init(server_t *self, holycfg_t *cfg)
 {
     holycfg_t defcfg = {0};
     
@@ -420,6 +418,10 @@ int server_init(server_t *self, holycfg_t *cfg)
 
     if (self->inited == 0x9527) {
         return 1;
+    }
+
+    if (!self->common_separator) {
+        self->common_separator = ",";
     }
     
     if (!cfg) {
@@ -437,10 +439,10 @@ int server_init(server_t *self, holycfg_t *cfg)
         return 0;
     }
 
-    self->conns = new_dict();
-    self->routes = new_dict();
-    self->whiteroutes = new_dict();
-    self->sessions = new_dict();
+    self->conns = holy_new_dict();
+    self->routes = holy_new_dict();
+    self->whiteroutes = holy_new_dict();
+    self->sessions = holy_new_dict();
     if (!self->conns || !self->routes || !self->whiteroutes || !self->sessions) {
         FREE_IF_NOT_NULL(self->cfg.template_path);
         FREE_IF_NOT_NULL(self->cfg.static_path);

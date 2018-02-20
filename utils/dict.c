@@ -1,7 +1,7 @@
 #include "dict.h"
 
 #define DICT_HASH_MASK  (DICT_HASH_SIZE - 1)
-#define DICT_HASH(key)  (tlv_hash(key) & DICT_HASH_MASK)
+#define DICT_HASH(key)  (holy_tlv_hash(key) & DICT_HASH_MASK)
 
 typedef struct {
     list_head_t link;
@@ -15,7 +15,7 @@ static dict_kv_t *dict_find(dict_t *self, tlv_t *key)
 
     //DEBUG("key: %d %u", key->t, key->l);
     list_for_each_entry(pos, &self->kvs[DICT_HASH(key)], link) {
-        if (tlv_is_equal(pos->key, key)) {
+        if (holy_tlv_is_equal(pos->key, key)) {
             return pos;
         }
     }
@@ -123,8 +123,8 @@ static int set_type_type(dict_t *self,
         return 0;
     }
 
-    k = new_tlv(kt, kl, kv);
-    v = new_tlv(vt, vl, vv);
+    k = holy_new_tlv(kt, kl, kv);
+    v = holy_new_tlv(vt, vl, vv);
 
     if (!k || !v) {
         FREE_IF_NOT_NULL(k);
@@ -149,7 +149,7 @@ static tlv_t *get_type_type(dict_t *self, tlv_type_t kt, unsigned kl, void *kv)
         return NULL;
     }
 
-    k = new_tlv(kt, kl, kv);
+    k = holy_new_tlv(kt, kl, kv);
     if (!k) {
         return NULL;
     }
@@ -167,7 +167,7 @@ static void del_by_type(dict_t *self, tlv_type_t kt, unsigned kl, void *kv)
         return;
     }
 
-    k = new_tlv(kt, kl, kv);
+    k = holy_new_tlv(kt, kl, kv);
     if (!k) {
         return;
     }
@@ -335,13 +335,13 @@ static void dict_show(dict_t *self)
     
     for (i = j = 0; i < DICT_HASH_SIZE; ++i) {
         list_for_each_entry_safe(pos, n, &self->kvs[i], link) {
-            PRINT_CYAN("[%d.%d]: %s", i, j++, tlv2str(pos->key));
-            PRINT_CYAN(" = %s\n", tlv2str(pos->value));
+            PRINT_CYAN("[%d.%d]: %s", i, j++, holy_tlv2str(pos->key));
+            PRINT_CYAN(" = %s\n", holy_tlv2str(pos->value));
         }
     }
 }
 
-int dict_init(dict_t *self)
+int holy_dict_init(dict_t *self)
 {
     int i;
 
@@ -381,7 +381,7 @@ int dict_init(dict_t *self)
     return 1;
 }
 
-void free_dict(dict_t *self)
+void holy_free_dict(dict_t *self)
 {
     if (self) {
         self->clear(self);
@@ -389,7 +389,7 @@ void free_dict(dict_t *self)
     }
 }
 
-dict_t *new_dict(void)
+dict_t *holy_new_dict(void)
 {
     dict_t *self = (dict_t *)malloc(sizeof *self);
     if (!self) {
@@ -397,7 +397,7 @@ dict_t *new_dict(void)
         return NULL;
     }
     memset(self, 0, sizeof *self);
-    dict_init(self);
+    holy_dict_init(self);
     return self;
 }
 
