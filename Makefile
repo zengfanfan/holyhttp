@@ -8,7 +8,7 @@ SUBDIRS := utils server
 CFLAGS-${_DEBUG_} += -g -ggdb
 CFLAGS-y += -I${TOP}
 CFLAGS-y += -D_GNU_SOURCE -D__USE_XOPEN
-CFLAGS-y += -Wall -Wno-missing-braces
+CFLAGS-y += -Wall -Wno-missing-braces -Wformat-truncation=0
 CFLAGS-y += -Werror
 CFLAGS-${_DEBUG_} += -DDEBUG_ON=1
 

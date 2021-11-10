@@ -10,8 +10,16 @@ static char buffer[1024*4] = {0};
 static const u32 buf_sz = sizeof buffer;
 
 #define STATUS_BODY \
-    "<html><body><div style=\"margin:100px auto;color:#fff;backgound:#ccc\">"\
-    "<h1>%3d %s</h1></div></html></body>"
+    "<html><head><style>h1{"\
+    "margin:100px auto;"\
+    "height:100px;"\
+    "line-height: 100px;"\
+    "text-align:center;"\
+    "vertical-align:middle;"\
+    "color:#fff;"\
+    "background-color:#888;"\
+    "}</style></head>"\
+    "<body><h1>%3d %s</h1></body></html>"
 #define STATUS_PACKET \
     "HTTP/1.1 %3d %s\r\n"\
     "Server: "SERVER_NAME"/"SERVER_VERSION"\r\n"\

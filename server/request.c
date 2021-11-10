@@ -351,6 +351,22 @@ static int send_html(request_t *self, char *html)
     return response(self, OK, html, strlen(html), "text/html", 0, 0, NULL, NULL, NULL);
 }
 
+static int send_html_with_args(request_t *self, char *fmt, ...)
+{
+    va_list ap;
+    char args[ARGS_BUF_LEN];
+
+    if (!self || !fmt) {
+        return 0;
+    }
+
+    va_start(ap, fmt);
+    vsnprintf(args, sizeof(args), fmt, ap);
+    va_end(ap);
+
+    return send_html(self, args);
+}
+
 static int send_srender_by(request_t *self, char *s, char *args)
 {
     dataset_t ds = {.inited=0};
@@ -485,7 +501,7 @@ int holy_request_init(request_t *self, connection_t *conn, req_pkt_t *pkt, statu
 
     // methods
     self->base.send_file = (typeof(self->base.send_file))send_file;
-    self->base.send_html = (typeof(self->base.send_html))send_html;
+    self->base.send_html = (typeof(self->base.send_html))send_html_with_args;
     self->base.send_status = (typeof(self->base.send_status))send_status;
     self->base.response = (typeof(self->base.response))response;
     self->base.redirect = (typeof(self->base.redirect))redirect;

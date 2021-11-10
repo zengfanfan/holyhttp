@@ -133,7 +133,7 @@ typedef struct holyreq {
     char incomplete;
 
     int (*send_file)(struct holyreq *self, char *filename);
-    int (*send_html)(struct holyreq *self, char *html);
+    int (*send_html)(struct holyreq *self, char *fmt, ...);
     int (*send_status)(struct holyreq *self, status_code_t code);
     int (*send_srender)(struct holyreq *self, char *string, char *fmt, ...);
     int (*send_frender)(struct holyreq *self, char *filename, char *fmt, ...);

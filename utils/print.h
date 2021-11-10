@@ -83,6 +83,8 @@ extern holy_dbg_lvl_t holydebug;
 #define MEMFAIL(...) \
     ERROR("Out of memory!")
 
+#define PTRACE(fmt, args...) PRINT_PURPLE(__LINE_FMT(">>>> "fmt" <<<<"), ##args)
+
 /*
     holydump - dump data
     @title: to prompt what's beging dumped

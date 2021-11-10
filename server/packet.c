@@ -28,7 +28,7 @@ char *holy_strstatus(status_code_t code)
         return "Partial Content";
     case MULTI_STATUS:
         return "Multi-Status";
-    
+
     case MULTI_CHOICES:
         return "Multiple Choices";
     case MOVED_PERMANENTLY:
@@ -98,7 +98,7 @@ char *holy_strstatus(status_code_t code)
         return "Retry With";
     case UNAVAILABLE_FOR_LEGAL_REASONS:
         return "Unavailable For Legal Reasons";
-    
+
     case INTERNAL_ERROR:
         return "Internal Server Error";
     case NOT_IMPLEMENTED:
@@ -121,10 +121,10 @@ char *holy_strstatus(status_code_t code)
         return "Bandwidth Limit Exceeded";
     case NOT_EXTENDED:
         return "Not Extended";
-    
+
     case UNPARSEABLE_RESPONSE_HEADERS:
         return "Unparseable Response Headers";
-        
+
     default:
         return "HOLY-XXX v_v";
     }
@@ -149,7 +149,7 @@ static void url_decode(char *url)
 {
     int i, j;
     int qlen = strlen(url);
-    
+
     for (i = j = 0; i < qlen; ++i, ++j) {
         if (url[i] == '%' && (i+2) < qlen) {
             url[j] = (hex2char(url[i+1])<<4) | hex2char(url[i+2]);
@@ -216,7 +216,7 @@ static int parse_requset_line(req_pkt_t *self, char *data, status_code_t *status
     }
 
     return 1;
-    
+
 }
 
 static int parse_query(req_pkt_t *self, char *query, status_code_t *status)
@@ -237,10 +237,10 @@ static int parse_query(req_pkt_t *self, char *query, status_code_t *status)
 
         url_decode(name);
         url_decode(value);
-        
+
         self->args->set_ss(self->args, name, value);
     }
-    
+
     return 1;
 }
 
@@ -263,7 +263,7 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
         *status = BAD_REQUEST;
         return 0;
     }
-    
+
     // includes \r\n\r\n, and null-terminated
     fields_len = fields_end - fields_start + 4;
     fields = (char *)malloc(fields_len + 1);
@@ -287,14 +287,14 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
         holy_str2lower(name);
         self->fields->set_ss(self->fields, name, value);
     }
-    
+
     if (self->method == POST_METHOD) {
         tmp = self->fields->get_ss(self->fields, "content-length");
         if (tmp) {
             self->content_length = atoi(tmp);
         }
     }
-    
+
     tmp = self->fields->get_ss(self->fields, "content-type");
     if (tmp) {
         // type/subtype; parameters
@@ -309,7 +309,7 @@ static int parse_headers(req_pkt_t *self, char *data, status_code_t *status, cha
     }
 
     *content = fields_end + 4;
-    
+
     free(fields);
     return 1;
 }
@@ -359,12 +359,12 @@ static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
         ERROR("boundary too long(%d)", ret);
         return 0;
     }
-    
+
     if (memcmp(end - len + 1, delimiter, len)) {
         *status = BAD_REQUEST;
         return 0;
     }
-    
+
     end -= len;
 
     // the first boundary
@@ -383,7 +383,7 @@ static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
         if (!next) {
             next = end + 1;
         }
-        
+
         // [now part is from pos to next]
         // content-disposition: form-data; name="xxxxx"\r\n\r\n<...data...>
         for (pos = holy_strnstr(pos, "name=\"", next - pos);
@@ -393,7 +393,7 @@ static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
             ERROR("Name not found in form-data");
             continue;
         }
-        
+
         snprintf(fmt, sizeof fmt, "name=\"%%%d[^\"]", MAX_FIELD_NAME_LEN);
         ret = sscanf(pos, fmt, name);
         if (ret != 1) {
@@ -408,7 +408,7 @@ static int parse_content(req_pkt_t *self, char *content, status_code_t *status)
         }
 
         pos += 4;// [now data is from pos to next]
-        
+
         self->args->set_sb(self->args, name, pos, next - pos);
     }
 
@@ -454,7 +454,7 @@ req_pkt_t *holy_new_req_pkt(char *data, u32 len, status_code_t *status)
     if (!status) {
         status = &code;
     }
-    
+
     if (!data || !len) {
         *status = BAD_REQUEST;
         return NULL;
@@ -471,13 +471,19 @@ req_pkt_t *holy_new_req_pkt(char *data, u32 len, status_code_t *status)
     if (!parse_requset_line(&tmp, data, status)) {
         goto fail;
     }
-    
+
     query = strchr(tmp.url, '?');
     if (query) {
         strncpy(tmp.uri, tmp.url, query - tmp.url);
-        if (!parse_query(&tmp, query + 1, status)) {
+        query = strdup(query+1);
+        if (!query) {
             goto fail;
         }
+        if (!parse_query(&tmp, query, status)) {
+            free(query);
+            goto fail;
+        }
+        free(query);
     } else {
         strcpy(tmp.uri, tmp.url);
     }
